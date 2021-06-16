@@ -15,39 +15,30 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
-import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
 import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.TableDefinition;
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.util.*;
+import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.*;
+import org.apache.kafka.connect.data.Time;
+import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.data.Schema.Type;
+import org.apache.kafka.connect.errors.ConnectException;
+
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
 import java.nio.ByteBuffer;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Types;
-import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Schema.Type;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
-
+import java.sql.*;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-
-import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
-import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
-import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
-import io.confluent.connect.jdbc.util.IdentifierRules;
-import io.confluent.connect.jdbc.util.TableId;
-import org.apache.kafka.connect.errors.ConnectException;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * A {@link DatabaseDialect} for Oracle.
@@ -90,20 +81,20 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
   @Override
   public StatementBinder statementBinder(
       PreparedStatement statement,
-      PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
       TableDefinition tableDefinition,
-      InsertMode insertMode
+      InsertMode insertMode,
+      Boolean coordinates
   ) {
     return new PreparedStatementBinder(
         this,
         statement,
-        pkMode,
         schemaPair,
         fieldsMetadata,
         tableDefinition,
-        insertMode
+        insertMode,
+        coordinates
     );
   }
 
@@ -140,7 +131,10 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     }
 
     if (schema.type() == Type.STRING) {
-      if (colDef.type() == Types.CLOB) {
+      if (colDef.type() == Types.BLOB) {
+        statement.setObject(index, ((String)value).getBytes());
+        return true;
+      } else if (colDef.type() == Types.CLOB) {
         statement.setCharacterStream(index, new StringReader((String) value));
         return true;
       } else if (colDef.type() == Types.NCLOB) {
@@ -200,12 +194,100 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "NUMBER(1,0)";
       case STRING:
+        if (field.name() != null && field.name().equals(converterPayloadFieldName())) {
+          return "BLOB";
+        }
+        if (field.name() != null && clusteredAttributes().contains(field.name())) {
+          return "VARCHAR2(100)";
+        }
         return "CLOB";
       case BYTES:
         return "BLOB";
       default:
         return super.getSqlType(field);
     }
+  }
+
+  @Override
+  public void applyDdlStatements(
+          Connection connection,
+          List<String> statements
+  ) throws SQLException {
+    try (Statement statement = connection.createStatement()) {
+      for (String ddlStatement : statements) {
+        Pattern pattern = Pattern.compile(";");
+        List<String> individuals = pattern.splitAsStream(ddlStatement).collect(Collectors.toList());
+        for (String individual : individuals) {
+          statement.executeUpdate(individual);
+        }
+      }
+    }
+  }
+
+  @Override
+  public String buildCreateTableStatement(
+          TableId table,
+          Collection<SinkRecordField> fields
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    //final List<String> pkFieldNames = extractPrimaryKeyFieldNames(fields);
+    builder.append("CREATE TABLE ");
+    builder.append(table);
+    builder.append(" (");
+    writeColumnsSpec(builder, fields);
+    builder.append(",");
+    builder.append(System.lineSeparator());
+    builder.append("CONSTRAINT ");
+    builder.append(table.tableName());
+    builder.append("_ensure_json ");
+    builder.append("CHECK (");
+    builder.appendColumnName(converterPayloadFieldName());
+    builder.append(" IS JSON)");
+    builder.append(")");
+    if (!distributionAttributes().isEmpty()) {
+      builder.append(System.lineSeparator());
+      builder.append("PARTITION BY HASH (");
+      builder.appendList()
+              .delimitedBy(",")
+              .transformedBy(ExpressionBuilder.quote())
+              .of(distributionAttributes());
+      builder.append(")");
+      builder.append("(");
+      for (int i=0; i<partitions(); i++) {
+        builder.append(System.lineSeparator());
+        builder.append("PARTITION ");
+        builder.append(table.tableName());
+        builder.append("_h");
+        builder.append(i);
+        if (i < partitions()-1) {builder.append(",");}
+      }
+      builder.append(")");
+    }
+    if (!clusteredAttributes().isEmpty()) {
+      builder.append(System.lineSeparator());
+      builder.append("CLUSTERING BY INTERLEAVED ORDER (");
+      builder.appendList()
+              .delimitedBy(",")
+              .transformedBy(ExpressionBuilder.quote())
+              .of(clusteredAttributes());
+      builder.append(")");
+    }
+    if (!zonemapAttributes().isEmpty()) {
+      builder.append(";");
+      builder.append(System.lineSeparator());
+      builder.append("CREATE MATERIALIZED ZONEMAP ");
+      builder.append(table.tableName() +"_zmap ");
+      builder.append("ON ");
+      builder.append(table);
+      builder.append(" (");
+      builder.appendList()
+              .delimitedBy(",")
+              .transformedBy(ExpressionBuilder.quote())
+              .of(zonemapAttributes());
+      builder.append(")");
+    }
+    builder.append(";");
+    return builder.toString();
   }
 
   @Override
@@ -255,55 +337,6 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     return Collections.singletonList(builder.toString());
   }
 
-  @Override
-  public String buildUpsertQueryStatement(
-      final TableId table,
-      Collection<ColumnId> keyColumns,
-      Collection<ColumnId> nonKeyColumns
-  ) {
-    // https://blogs.oracle.com/cmar/entry/using_merge_to_do_an
-    final Transform<ColumnId> transform = (builder, col) -> {
-      builder.append(table)
-             .append(".")
-             .appendColumnName(col.name())
-             .append("=incoming.")
-             .appendColumnName(col.name());
-    };
-
-    ExpressionBuilder builder = expressionBuilder();
-    builder.append("merge into ");
-    builder.append(table);
-    builder.append(" using (select ");
-    builder.appendList()
-           .delimitedBy(", ")
-           .transformedBy(ExpressionBuilder.columnNamesWithPrefix("? "))
-           .of(keyColumns, nonKeyColumns);
-    builder.append(" FROM dual) incoming on(");
-    builder.appendList()
-           .delimitedBy(" and ")
-           .transformedBy(transform)
-           .of(keyColumns);
-    builder.append(")");
-    if (nonKeyColumns != null && !nonKeyColumns.isEmpty()) {
-      builder.append(" when matched then update set ");
-      builder.appendList()
-             .delimitedBy(",")
-             .transformedBy(transform)
-             .of(nonKeyColumns);
-    }
-
-    builder.append(" when not matched then insert(");
-    builder.appendList()
-           .delimitedBy(",")
-           .of(nonKeyColumns, keyColumns);
-    builder.append(") values(");
-    builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(ExpressionBuilder.columnNamesWithPrefix("incoming."))
-           .of(nonKeyColumns, keyColumns);
-    builder.append(")");
-    return builder.toString();
-  }
 
   @Override
   protected String sanitizedUrl(String url) {

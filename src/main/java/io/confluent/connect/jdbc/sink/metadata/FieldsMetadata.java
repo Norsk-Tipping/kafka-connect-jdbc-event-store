@@ -15,59 +15,61 @@
 
 package io.confluent.connect.jdbc.sink.metadata;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import java.util.*;
 
 public class FieldsMetadata {
 
-  public final Set<String> keyFieldNames;
+  public final Set<String> upsertKeyFieldNames;
+  public final Set<String> deleteKeyFieldNames;
   public final Set<String> nonKeyFieldNames;
   public final Map<String, SinkRecordField> allFields;
 
-  private FieldsMetadata(
-      Set<String> keyFieldNames,
+  // visible for testing
+  public FieldsMetadata(
+      Set<String> upsertKeyFieldNames,
+      Set<String> deleteKeyFieldNames,
       Set<String> nonKeyFieldNames,
-      Map<String, SinkRecordField> allFields
+      Map<String, SinkRecordField> allFields,
+      boolean deleteRecord
   ) {
-    boolean fieldCountsMatch = (keyFieldNames.size() + nonKeyFieldNames.size() == allFields.size());
-    boolean allFieldsContained = (allFields.keySet().containsAll(keyFieldNames)
+    HashSet<String> result = new HashSet<>(upsertKeyFieldNames);
+    result.addAll(deleteKeyFieldNames);
+    boolean fieldCountsMatch = (nonKeyFieldNames.size()  == allFields.size());
+    boolean allFieldsContained = (allFields.keySet().containsAll(result)
                    && allFields.keySet().containsAll(nonKeyFieldNames));
-    if (!fieldCountsMatch || !allFieldsContained) {
+    if (!deleteRecord && (!fieldCountsMatch || !allFieldsContained)) {
       throw new IllegalArgumentException(String.format(
           "Validation fail -- keyFieldNames:%s nonKeyFieldNames:%s allFields:%s",
-          keyFieldNames, nonKeyFieldNames, allFields
+          result, nonKeyFieldNames, allFields
       ));
     }
-    this.keyFieldNames = keyFieldNames;
+    this.deleteKeyFieldNames = deleteKeyFieldNames;
+    this.upsertKeyFieldNames = upsertKeyFieldNames;
     this.nonKeyFieldNames = nonKeyFieldNames;
     this.allFields = allFields;
   }
 
   public static FieldsMetadata extract(
       final String tableName,
-      final JdbcSinkConfig.PrimaryKeyMode pkMode,
-      final List<String> configuredPkFields,
-      final Set<String> fieldsWhitelist,
+      final JdbcSinkConfig.InsertMode insertMode,
+      final Set<String> upsertKeys,
+      final Set<String> deleteKeys,
+      final Boolean coordinates,
+      final Boolean deleteEnabled,
       final SchemaPair schemaPair
   ) {
     return extract(
         tableName,
-        pkMode,
-        configuredPkFields,
-        fieldsWhitelist,
+        insertMode,
+        upsertKeys,
+        deleteKeys,
+        coordinates,
+        deleteEnabled,
         schemaPair.keySchema,
         schemaPair.valueSchema
     );
@@ -75,9 +77,11 @@ public class FieldsMetadata {
 
   public static FieldsMetadata extract(
       final String tableName,
-      final JdbcSinkConfig.PrimaryKeyMode pkMode,
-      final List<String> configuredPkFields,
-      final Set<String> fieldsWhitelist,
+      final JdbcSinkConfig.InsertMode insertMode,
+      final Set<String> upsertKeys,
+      final Set<String> deleteKeys,
+      final Boolean coordinates,
+      final Boolean deleteEnabled,
       final Schema keySchema,
       final Schema valueSchema
   ) {
@@ -87,37 +91,29 @@ public class FieldsMetadata {
 
     final Map<String, SinkRecordField> allFields = new HashMap<>();
 
-    final Set<String> keyFieldNames = new LinkedHashSet<>();
-    switch (pkMode) {
-      case NONE:
-        break;
-
-      case KAFKA:
-        extractKafkaPk(tableName, configuredPkFields, allFields, keyFieldNames);
-        break;
-
-      case RECORD_KEY:
-        extractRecordKeyPk(tableName, configuredPkFields, keySchema, allFields, keyFieldNames);
-        break;
-
-      case RECORD_VALUE:
-        extractRecordValuePk(tableName, configuredPkFields, valueSchema, allFields, keyFieldNames);
-        break;
-
-      default:
-        throw new ConnectException("Unknown primary key mode: " + pkMode);
-    }
-
+    final Set<String> upsertKeyFieldNames = new LinkedHashSet<>();
+    final Set<String> deleteKeyFieldNames = new LinkedHashSet<>();
     final Set<String> nonKeyFieldNames = new LinkedHashSet<>();
+
+      if (coordinates && valueSchema != null) {
+        extractKafkaPk(tableName, nonKeyFieldNames, allFields);
+      }
+      if (valueSchema != null && ( insertMode == JdbcSinkConfig.InsertMode.UPSERT || insertMode == JdbcSinkConfig.InsertMode.UPDATE) ) {
+        extractRecordValuePk(tableName, upsertKeys, valueSchema, allFields, upsertKeyFieldNames);
+      }
+
     if (valueSchema != null) {
       for (Field field : valueSchema.fields()) {
-        if (keyFieldNames.contains(field.name())) {
-          continue;
+        /*if (deleteEnabled) {
+          if (deleteKeyFieldNames.contains(field.name())) {
+            continue;
+          }
         }
-        if (!fieldsWhitelist.isEmpty() && !fieldsWhitelist.contains(field.name())) {
-          continue;
-        }
-
+        if (insertMode == JdbcSinkConfig.InsertMode.UPSERT || insertMode == JdbcSinkConfig.InsertMode.UPDATE) {
+          if (upsertKeyFieldNames.contains(field.name())) {
+            continue;
+          }
+        }*/
         nonKeyFieldNames.add(field.name());
 
         final Schema fieldSchema = field.schema();
@@ -125,9 +121,13 @@ public class FieldsMetadata {
       }
     }
 
+    if (deleteEnabled) {
+      extractRecordKeyPk(tableName, deleteKeys, keySchema, allFields, deleteKeyFieldNames);
+    }
+
     if (allFields.isEmpty()) {
       throw new ConnectException(
-          "No fields found using key and value schemas for table: " + tableName
+              "No fields found using key and value schemas for table: " + tableName
       );
     }
 
@@ -157,16 +157,15 @@ public class FieldsMetadata {
       }
     }
 
-    return new FieldsMetadata(keyFieldNames, nonKeyFieldNames, allFieldsOrdered);
+    return new FieldsMetadata(upsertKeyFieldNames, deleteKeyFieldNames, nonKeyFieldNames, allFieldsOrdered, valueSchema == null);
   }
 
   private static void extractKafkaPk(
       final String tableName,
-      final List<String> configuredPkFields,
-      final Map<String, SinkRecordField> allFields,
-      final Set<String> keyFieldNames
+      final Set<String> nonKeyFieldNames,
+      final Map<String, SinkRecordField> allFields
   ) {
-    if (configuredPkFields.isEmpty()) {
+    /*if (configuredPkFields.isEmpty()) {
       keyFieldNames.addAll(JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES);
     } else if (configuredPkFields.size() == 3) {
       keyFieldNames.addAll(configuredPkFields);
@@ -179,73 +178,134 @@ public class FieldsMetadata {
           JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES,
           configuredPkFields
       ));
-    }
-    final Iterator<String> it = keyFieldNames.iterator();
+    }*/
+
+    final Iterator<String> it = JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.iterator();
     final String topicFieldName = it.next();
     allFields.put(
         topicFieldName,
         new SinkRecordField(Schema.STRING_SCHEMA, topicFieldName, true)
     );
+    nonKeyFieldNames.add(topicFieldName);
+
     final String partitionFieldName = it.next();
     allFields.put(
         partitionFieldName,
         new SinkRecordField(Schema.INT32_SCHEMA, partitionFieldName, true)
     );
+    nonKeyFieldNames.add(partitionFieldName);
+
     final String offsetFieldName = it.next();
     allFields.put(
         offsetFieldName,
         new SinkRecordField(Schema.INT64_SCHEMA, offsetFieldName, true)
     );
+    nonKeyFieldNames.add(offsetFieldName);
   }
 
   private static void extractRecordKeyPk(
       final String tableName,
-      final List<String> configuredPkFields,
+      final Set<String> deleteKeys,
       final Schema keySchema,
       final Map<String, SinkRecordField> allFields,
-      final Set<String> keyFieldNames
+      final Set<String> deleteKeyFieldNames
   ) {
     {
       if (keySchema == null) {
         throw new ConnectException(String.format(
-            "PK mode for table '%s' is %s, but record key schema is missing",
+            "Delete is enabled for table '%s' in %s, but record key schema is missing",
             tableName,
-            JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY
+            JdbcSinkConfig.DELETE_ENABLED
         ));
       }
       final Schema.Type keySchemaType = keySchema.type();
       if (keySchemaType.isPrimitive()) {
-        if (configuredPkFields.size() != 1) {
+        if (deleteKeys.size() != 1) {
           throw new ConnectException(String.format(
               "Need exactly one PK column defined since the key schema for records is a "
               + "primitive type, defined columns are: %s",
-              configuredPkFields
+              deleteKeys
           ));
         }
-        final String fieldName = configuredPkFields.get(0);
-        keyFieldNames.add(fieldName);
-        allFields.put(fieldName, new SinkRecordField(keySchema, fieldName, true));
-      } else if (keySchemaType == Schema.Type.STRUCT) {
-        if (configuredPkFields.isEmpty()) {
-          for (Field keyField : keySchema.fields()) {
-            keyFieldNames.add(keyField.name());
+        final String fieldName = deleteKeys.stream().findFirst().orElseThrow(() ->
+                new ConnectException(String.format(
+                        "Need exactly one PK column defined since the key schema for records is a "
+                                + "primitive type, defined columns are: %s",
+                        deleteKeys
+                )));
+
+        deleteKeyFieldNames.add(fieldName);
+        if (!allFields.isEmpty()) {
+          SinkRecordField field = Optional.ofNullable(allFields)
+                  .map(fields -> fields.get(fieldName))
+                  .orElseThrow(() ->
+                          new ConnectException(String.format(
+                                  "Delete is enabled but the configured key %s is not found in the record value schema",
+                                  fieldName
+                          ))
+                  );
+          if (!Objects.equals(keySchema.type(), field.schema().type())) {
+            throw new ConnectException(String.format(
+                    "Delete is enabled but the configured Kafka record key %s is of type %S while previous record value " +
+                            "fields for that field are stored as type %s. \n" +
+                            "Use SMT to assure Kafka record key that is used to delete is of same type as respective field in the Kafka record value field that gets inserted",
+                    fieldName,
+                    keySchema.type().toString(),
+                    field.schema().type().toString()
+            ));
           }
+          allFields.put(fieldName, new SinkRecordField(field.schema(), field.name(), true));
         } else {
-          for (String fieldName : configuredPkFields) {
+          allFields.put(fieldName, new SinkRecordField(keySchema, fieldName, true));
+        }
+      } else if (keySchemaType == Schema.Type.STRUCT) {
+        if (deleteKeys.isEmpty()) {
+            throw new ConnectException(String.format(
+                    "Delete is enabled but no delete keys are found in configuration %s",
+                    JdbcSinkConfig.DELETE_KEYS
+            ));
+        } else {
+          for (String fieldName : deleteKeys) {
             final Field keyField = keySchema.field(fieldName);
             if (keyField == null) {
               throw new ConnectException(String.format(
-                  "PK mode for table '%s' is %s with configured PK fields %s, but record key "
+                  "%s is 'true' for table '%s' and %s is configured with field(s) %s, but record key "
                   + "schema does not contain field: %s",
-                  tableName, JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY, configuredPkFields, fieldName
+                      JdbcSinkConfig.DELETE_ENABLED, tableName, JdbcSinkConfig.DELETE_KEYS, deleteKeys, fieldName
               ));
             }
+            deleteKeyFieldNames.add(keyField.name());
+            if (!allFields.isEmpty()) {
+              SinkRecordField field = Optional.of(allFields)
+                      .map(fields -> fields.get(keyField.name()))
+                      .orElseThrow(() ->
+                              new ConnectException(String.format(
+                                      "Delete is enabled but the configured key %s is not found in the record value schema",
+                                      keyField.name()
+                              ))
+                      );
+              Schema.Type keyFieldType = Optional.of(keySchema)
+                      .map(s -> s.field(keyField.name()))
+                      .map(f -> f.schema().type()).orElseThrow(
+                              () -> new ConnectException(String.format(
+                      "Could not determine schema type for key field %s",
+                      fieldName))
+                      );
+              if (!Objects.equals(keyFieldType, field.schema().type())) {
+                throw new ConnectException(String.format(
+                        "Delete is enabled but the configured Kafka record key %s is of type %S while previous record value " +
+                                "fields for that field are stored as type %s. \n" +
+                                "Use SMT to assure Kafka record key that is used to delete is of same type as respective field in the Kafka record value field that gets inserted",
+                        fieldName,
+                        keySchema.field(keyField.name()).schema().type(),
+                        field.schema().type().toString()
+                ));
+              }
+              allFields.put(keyField.name(), new SinkRecordField(field.schema(), fieldName, true));
+            } else {
+              allFields.put(fieldName, new SinkRecordField(keySchema, fieldName, true));
+            }
           }
-          keyFieldNames.addAll(configuredPkFields);
-        }
-        for (String fieldName : keyFieldNames) {
-          final Schema fieldSchema = keySchema.field(fieldName).schema();
-          allFields.put(fieldName, new SinkRecordField(fieldSchema, fieldName, true));
         }
       } else {
         throw new ConnectException(
@@ -257,44 +317,46 @@ public class FieldsMetadata {
 
   private static void extractRecordValuePk(
       final String tableName,
-      final List<String> configuredPkFields,
+      final Set<String> upsertKeys,
       final Schema valueSchema,
       final Map<String, SinkRecordField> allFields,
-      final Set<String> keyFieldNames
+      final Set<String> upsertKeyFieldNames
   ) {
     if (valueSchema == null) {
       throw new ConnectException(String.format(
-          "PK mode for table '%s' is %s, but record value schema is missing",
-          tableName,
-          JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE)
+              "Upsert or Update is enabled for table '%s' in %s, but record value schema is missing",
+              tableName,
+              JdbcSinkConfig.INSERT_MODE)
       );
     }
-    if (configuredPkFields.isEmpty()) {
-      for (Field keyField : valueSchema.fields()) {
-        keyFieldNames.add(keyField.name());
-      }
+    if (upsertKeys.isEmpty()) {
+      throw new ConnectException(
+              String.format("Upsert or Update is enabled for table '%s' in %s, but %s is empty",
+                      tableName,
+                      JdbcSinkConfig.INSERT_MODE,
+                      JdbcSinkConfig.UPSERT_KEYS));
     } else {
-      for (String fieldName : configuredPkFields) {
-        if (valueSchema.field(fieldName) == null) {
+      for (String fieldName : upsertKeys) {
+        final Field keyField = valueSchema.field(fieldName);
+        if (keyField == null) {
           throw new ConnectException(String.format(
-              "PK mode for table '%s' is %s with configured PK fields %s, but record value "
-              + "schema does not contain field: %s",
-              tableName, JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE, configuredPkFields, fieldName
+                  "Upsert or Update is configured for table '%s' and %s is configured with field(s) %s, but record value "
+                          + "schema does not contain field: %s",
+                  tableName, JdbcSinkConfig.UPSERT_KEYS, upsertKeys, fieldName
           ));
         }
+        upsertKeyFieldNames.add(keyField.name());
+
+        allFields.put(keyField.name(), new SinkRecordField(keyField.schema(), fieldName, true));
       }
-      keyFieldNames.addAll(configuredPkFields);
-    }
-    for (String fieldName : keyFieldNames) {
-      final Schema fieldSchema = valueSchema.field(fieldName).schema();
-      allFields.put(fieldName, new SinkRecordField(fieldSchema, fieldName, true));
     }
   }
 
   @Override
   public String toString() {
     return "FieldsMetadata{"
-           + "keyFieldNames=" + keyFieldNames
+           + "upsertKeyFieldNames=" + upsertKeyFieldNames
+           + "deleteKeyFieldNames=" + deleteKeyFieldNames
            + ", nonKeyFieldNames=" + nonKeyFieldNames
            + ", allFields=" + allFields
            + '}';

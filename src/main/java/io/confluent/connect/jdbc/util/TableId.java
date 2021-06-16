@@ -15,9 +15,9 @@
 
 package io.confluent.connect.jdbc.util;
 
-import java.util.Objects;
-
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Expressable;
+
+import java.util.Objects;
 
 public class TableId implements Comparable<TableId>, Expressable {
 

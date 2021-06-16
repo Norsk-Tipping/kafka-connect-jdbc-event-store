@@ -15,34 +15,25 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import java.util.Map;
+import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.util.*;
+import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.data.Schema.Type;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.util.Collection;
-
-import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
-import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
-import io.confluent.connect.jdbc.source.ColumnMapping;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
-import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
-import io.confluent.connect.jdbc.util.IdentifierRules;
-import io.confluent.connect.jdbc.util.TableId;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * A {@link DatabaseDialect} for PostgreSQL.
@@ -67,6 +58,18 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   static final String JSON_TYPE_NAME = "json";
   static final String JSONB_TYPE_NAME = "jsonb";
+  static final String UUID_TYPE_NAME = "uuid";
+
+  /**
+   * Define the PG datatypes that require casting upon insert/update statements.
+   */
+  private static final Set<String> CAST_TYPES = Collections.unmodifiableSet(
+      Utils.mkSet(
+          JSON_TYPE_NAME,
+          JSONB_TYPE_NAME,
+          UUID_TYPE_NAME
+      )
+  );
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -95,95 +98,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
     log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
-  }
-
-
-  @Override
-  public String addFieldToSchema(
-      ColumnDefinition columnDefn,
-      SchemaBuilder builder
-  ) {
-    // Add the PostgreSQL-specific types first
-    final String fieldName = fieldNameFor(columnDefn);
-    switch (columnDefn.type()) {
-      case Types.BIT: {
-        // PostgreSQL allows variable length bit strings, but when length is 1 then the driver
-        // returns a 't' or 'f' string value to represent the boolean value, so we need to handle
-        // this as well as lengths larger than 8.
-        boolean optional = columnDefn.isOptional();
-        int numBits = columnDefn.precision();
-        Schema schema;
-        if (numBits <= 1) {
-          schema = optional ? Schema.OPTIONAL_BOOLEAN_SCHEMA : Schema.BOOLEAN_SCHEMA;
-        } else if (numBits <= 8) {
-          // For consistency with what the connector did before ...
-          schema = optional ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
-        } else {
-          schema = optional ? Schema.OPTIONAL_BYTES_SCHEMA : Schema.BYTES_SCHEMA;
-        }
-        builder.field(fieldName, schema);
-        return fieldName;
-      }
-      case Types.OTHER: {
-        // Some of these types will have fixed size, but we drop this from the schema conversion
-        // since only fixed byte arrays can have a fixed size
-        if (isJsonType(columnDefn)) {
-          builder.field(
-              fieldName,
-              columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA
-          );
-          return fieldName;
-        }
-        break;
-      }
-      default:
-        break;
-    }
-
-    // Delegate for the remaining logic
-    return super.addFieldToSchema(columnDefn, builder);
-  }
-
-  @Override
-  protected ColumnConverter columnConverterFor(
-      ColumnMapping mapping,
-      ColumnDefinition defn,
-      int col,
-      boolean isJdbc4
-  ) {
-    // First handle any PostgreSQL-specific types
-    ColumnDefinition columnDefn = mapping.columnDefn();
-    switch (columnDefn.type()) {
-      case Types.BIT: {
-        // PostgreSQL allows variable length bit strings, but when length is 1 then the driver
-        // returns a 't' or 'f' string value to represent the boolean value, so we need to handle
-        // this as well as lengths larger than 8.
-        final int numBits = columnDefn.precision();
-        if (numBits <= 1) {
-          return rs -> rs.getBoolean(col);
-        } else if (numBits <= 8) {
-          // Do this for consistency with earlier versions of the connector
-          return rs -> rs.getByte(col);
-        }
-        return rs -> rs.getBytes(col);
-      }
-      case Types.OTHER: {
-        if (isJsonType(columnDefn)) {
-          return rs -> rs.getString(col);
-        }
-        break;
-      }
-      default:
-        break;
-    }
-
-    // Delegate for the remaining logic
-    return super.columnConverterFor(mapping, defn, col, isJdbc4);
-  }
-
-  protected boolean isJsonType(ColumnDefinition columnDefn) {
-    String typeName = columnDefn.typeName();
-    return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
   }
 
   @Override
@@ -218,6 +132,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
+        if (field.name() != null && field.name().equals(converterPayloadFieldName())) {
+          return "JSONB";
+        }
         return "TEXT";
       case BYTES:
         return "BYTEA";
@@ -227,17 +144,128 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
-  public String buildUpsertQueryStatement(
-      TableId table,
-      Collection<ColumnId> keyColumns,
-      Collection<ColumnId> nonKeyColumns
+  public String buildCreateTableStatement(
+          TableId table,
+          Collection<SinkRecordField> fields
   ) {
-    final Transform<ColumnId> transform = (builder, col) -> {
-      builder.appendColumnName(col.name())
-             .append("=EXCLUDED.")
-             .appendColumnName(col.name());
-    };
+    ExpressionBuilder builder = expressionBuilder();
 
+    builder.append("CREATE TABLE ");
+    builder.append(table);
+    builder.append(" (");
+    writeColumnsSpec(builder, fields);
+    builder.append(")");
+    builder.append(System.lineSeparator());
+    if (!distributionAttributes().isEmpty()) {
+      builder.append(System.lineSeparator());
+      builder.append("PARTITION BY HASH (");
+      builder.appendList()
+              .delimitedBy(",")
+              .transformedBy(ExpressionBuilder.quote())
+              .of(distributionAttributes());
+      builder.append(")");
+    }
+    if (!distributionAttributes().isEmpty()) {
+      builder.append(";");
+      for (int i=0; i<partitions(); i++) {
+        builder.append(System.lineSeparator());
+        builder.append("CREATE TABLE ");
+        builder.append(table.tableName());
+        builder.append("_h");
+        builder.append(i);
+        builder.append(" PARTITION OF ");
+        builder.append(table);
+        builder.append(" FOR VALUES WITH (modulus 10, remainder ");
+        builder.append(i);
+        builder.append(")");
+        if (i<partitions()-1) {builder.append(";");}
+      }
+    }
+    if (!zonemapAttributes().isEmpty()) {
+      builder.append(";");
+      if (!distributionAttributes().isEmpty()) {
+        for (int i=0; i<partitions(); i++) {
+          int finalI = i;
+          zonemapAttributes().forEach(ca -> {
+            builder.append(System.lineSeparator());
+            builder.append("CREATE INDEX brin_");
+            builder.append(table.tableName());
+            builder.append("_h");
+            builder.append(finalI);
+            builder.append("_");
+            builder.append(ca);
+            builder.append(" ON ");
+            builder.append(table.tableName());
+            builder.append("_h");
+            builder.append(finalI);
+            builder.append(" USING brin(");
+            builder.append(ca);
+            builder.append(")");
+            if (finalI < partitions()) {builder.append(";");}
+          });
+        }
+      } else {
+        zonemapAttributes().forEach(ca -> {
+          builder.append(System.lineSeparator());
+          builder.append("CREATE INDEX brin_");
+          builder.append(table.tableName());
+          builder.append("_");
+          builder.append(ca);
+          builder.append(" ON ");
+          builder.append(table);
+          builder.append(" USING brin(");
+          builder.append(ca);
+          builder.append(")");
+        });
+      }
+    }
+    if (!clusteredAttributes().isEmpty()) {
+      builder.append(";");
+      builder.append(System.lineSeparator());
+      builder.append("CREATE EXTENSION IF NOT EXISTS bloom;");
+      if (!distributionAttributes().isEmpty()) {
+        for (int i=0; i<partitions(); i++) {
+            builder.append(System.lineSeparator());
+            builder.append("CREATE INDEX bloom_");
+            builder.append(table.tableName());
+            builder.append("_h");
+            builder.append(i);
+            builder.append(" ON ");
+            builder.append(table.tableName());
+            builder.append("_h");
+            builder.append(i);
+            builder.append(" USING bloom(");
+            builder.appendList()
+                    .delimitedBy(",")
+                    .transformedBy(ExpressionBuilder.quote())
+                    .of(clusteredAttributes());
+            builder.append(")");
+            if (i<partitions()-1) {builder.append(";");}
+        }
+      } else {
+        builder.append(System.lineSeparator());
+        builder.append("CREATE INDEX bloom_");
+        builder.append(table.tableName());
+        builder.append(" ON ");
+        builder.append(table.tableName());
+        builder.append(" USING bloom(");
+        builder.appendList()
+                .delimitedBy(",")
+                .transformedBy(ExpressionBuilder.quote())
+                .of(clusteredAttributes());
+        builder.append(")");
+      }
+    }
+    builder.append(";");
+    return builder.toString();
+  }
+
+  @Override
+  public String buildInsertStatement(
+      TableId table,
+      Collection<ColumnId> nonKeyColumns,
+      TableDefinition definition
+  ) {
     ExpressionBuilder builder = expressionBuilder();
     builder.append("INSERT INTO ");
     builder.append(table);
@@ -245,22 +273,37 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     builder.appendList()
            .delimitedBy(",")
            .transformedBy(ExpressionBuilder.columnNames())
-           .of(keyColumns, nonKeyColumns);
+           .of(nonKeyColumns);
     builder.append(") VALUES (");
-    builder.appendMultiple(",", "?", keyColumns.size() + nonKeyColumns.size());
-    builder.append(") ON CONFLICT (");
     builder.appendList()
            .delimitedBy(",")
-           .transformedBy(ExpressionBuilder.columnNames())
-           .of(keyColumns);
-    if (nonKeyColumns.isEmpty()) {
-      builder.append(") DO NOTHING");
-    } else {
-      builder.append(") DO UPDATE SET ");
+           .transformedBy(this.columnValueVariables(definition))
+           .of(nonKeyColumns);
+    builder.append(")");
+    return builder.toString();
+  }
+
+  @Override
+  public String buildUpdateStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns,
+      TableDefinition definition
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("UPDATE ");
+    builder.append(table);
+    builder.append(" SET ");
+    builder.appendList()
+           .delimitedBy(", ")
+           .transformedBy(this.columnNamesWithValueVariables(definition))
+           .of(nonKeyColumns);
+    if (!keyColumns.isEmpty()) {
+      builder.append(" WHERE ");
       builder.appendList()
-              .delimitedBy(",")
-              .transformedBy(transform)
-              .of(nonKeyColumns);
+             .delimitedBy(" AND ")
+             .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
+             .of(keyColumns);
     }
     return builder.toString();
   }
@@ -280,4 +323,62 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
+  /**
+   * Return the transform that produces an assignment expression each with the name of one of the
+   * columns and the prepared statement variable. PostgreSQL may require the variable to have a
+   * type suffix, such as {@code ?::uuid}.
+   *
+   * @param defn the table definition; may be null if unknown
+   * @return the transform that produces the assignment expression for use within a prepared
+   *         statement; never null
+   */
+  protected Transform<ColumnId> columnNamesWithValueVariables(TableDefinition defn) {
+    return (builder, columnId) -> {
+      builder.appendColumnName(columnId.name());
+      builder.append(" = ?");
+      builder.append(valueTypeCast(defn, columnId));
+    };
+  }
+
+  /**
+   * Return the transform that produces a prepared statement variable for each of the columns.
+   * PostgreSQL may require the variable to have a type suffix, such as {@code ?::uuid}.
+   *
+   * @param defn the table definition; may be null if unknown
+   * @return the transform that produces the variable expression for each column; never null
+   */
+  protected Transform<ColumnId> columnValueVariables(TableDefinition defn) {
+    return (builder, columnId) -> {
+      builder.append("?");
+      builder.append(valueTypeCast(defn, columnId));
+    };
+  }
+
+  /**
+   * Return the typecast expression that can be used as a suffix for a value variable of the
+   * given column in the defined table.
+   *
+   * <p>This method returns a blank string except for those column types that require casting
+   * when set with literal values. For example, a column of type {@code uuid} must be cast when
+   * being bound with with a {@code varchar} literal, since a UUID value cannot be bound directly.
+   *
+   * @param tableDefn the table definition; may be null if unknown
+   * @param columnId  the column within the table; may not be null
+   * @return the cast expression, or an empty string; never null
+   */
+  protected String valueTypeCast(TableDefinition tableDefn, ColumnId columnId) {
+    if (tableDefn != null) {
+      ColumnDefinition defn = tableDefn.definitionForColumn(columnId.name());
+      if (defn != null) {
+        String typeName = defn.typeName(); // database-specific
+        if (typeName != null) {
+          typeName = typeName.toLowerCase();
+          if (CAST_TYPES.contains(typeName)) {
+            return "::" + typeName;
+          }
+        }
+      }
+    }
+    return "";
+  }
 }

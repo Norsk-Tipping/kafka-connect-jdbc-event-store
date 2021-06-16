@@ -14,17 +14,16 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.Map;
-
 import io.confluent.connect.jdbc.util.TableType;
-
 import org.apache.kafka.common.config.ConfigException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 

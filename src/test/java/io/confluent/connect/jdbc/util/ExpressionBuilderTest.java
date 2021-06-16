@@ -15,12 +15,12 @@
 
 package io.confluent.connect.jdbc.util;
 
-import java.util.function.Consumer;
-
 import org.junit.Before;
 import org.junit.Test;
 
-import static org.junit.Assert.*;
+import java.util.function.Consumer;
+
+import static org.junit.Assert.assertEquals;
 
 public class ExpressionBuilderTest {
 

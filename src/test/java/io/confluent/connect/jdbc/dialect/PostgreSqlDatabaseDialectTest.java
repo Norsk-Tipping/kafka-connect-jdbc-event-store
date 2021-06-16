@@ -15,19 +15,17 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import java.sql.Types;
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Schema;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.util.*;
+import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.data.Schema.Type;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
+import java.sql.JDBCType;
+import java.util.ArrayList;
 import java.util.Arrays;
-
-import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.TableId;
+import java.util.List;
+import java.util.UUID;
 
 import static org.junit.Assert.assertEquals;
 
@@ -35,7 +33,10 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Override
   protected PostgreSqlDatabaseDialect createDialect() {
-    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something"));
+    return new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something",
+            JdbcSinkConfig.DISTRIBUTIONATTRIBUTES, "c1",
+            JdbcSinkConfig.ZONEMAPATTRIBUTES, "c6,c7",
+            JdbcSinkConfig.CLUSTEREDATTRIBUTES, "c1, c2"));
   }
 
   @Test
@@ -60,13 +61,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void testCustomColumnConverters() {
-    assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.JSON_TYPE_NAME, Schema.STRING_SCHEMA, String.class);
-    assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.JSONB_TYPE_NAME, Schema.STRING_SCHEMA, String.class);
-  }
-
-  @Test
-  public void shouldMapDataTypes() {
+  public void shouldMapDataTypesForAddingColumnToTable() {
     verifyDataTypeMapping("SMALLINT", Schema.INT8_SCHEMA);
     verifyDataTypeMapping("SMALLINT", Schema.INT16_SCHEMA);
     verifyDataTypeMapping("INT", Schema.INT32_SCHEMA);
@@ -80,6 +75,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     verifyDataTypeMapping("DATE", Date.SCHEMA);
     verifyDataTypeMapping("TIME", Time.SCHEMA);
     verifyDataTypeMapping("TIMESTAMP", Timestamp.SCHEMA);
+    assertJsonMapping("JSONB", Schema.STRING_SCHEMA);
   }
 
   @Test
@@ -100,17 +96,60 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   @Test
   public void shouldBuildCreateQueryStatement() {
     assertEquals(
-        "CREATE TABLE \"myTable\" (\n"
-        + "\"c1\" INT NOT NULL,\n"
-        + "\"c2\" BIGINT NOT NULL,\n"
-        + "\"c3\" TEXT NOT NULL,\n"
-        + "\"c4\" TEXT NULL,\n"
-        + "\"c5\" DATE DEFAULT '2001-03-15',\n"
-        + "\"c6\" TIME DEFAULT '00:00:00.000',\n"
-        + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "\"c8\" DECIMAL NULL,\n"
-        + "\"c9\" BOOLEAN DEFAULT TRUE,\n"
-        + "PRIMARY KEY(\"c1\"))",
+        "CREATE TABLE \"myTable\" (" + System.lineSeparator() +
+                "\"c1\" INT NOT NULL," + System.lineSeparator() +
+                "\"c2\" BIGINT NOT NULL," + System.lineSeparator() +
+                "\"c3\" TEXT NOT NULL," + System.lineSeparator() +
+                "\"c4\" TEXT NULL," + System.lineSeparator() +
+                "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+                "\"c6\" TIME DEFAULT '00:00:00.000'," + System.lineSeparator() +
+                "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+                "\"c8\" DECIMAL NULL," + System.lineSeparator() +
+                "\"c9\" BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
+                "\"event\" JSONB NOT NULL)" + System.lineSeparator() +
+                System.lineSeparator() +
+                "PARTITION BY HASH (\"c1\");" + System.lineSeparator() +
+                "CREATE TABLE myTable_h0 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 0);" + System.lineSeparator() +
+                "CREATE TABLE myTable_h1 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 1);" + System.lineSeparator() +
+                "CREATE TABLE myTable_h2 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 2);" + System.lineSeparator() +
+                "CREATE TABLE myTable_h3 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 3);" + System.lineSeparator() +
+                "CREATE TABLE myTable_h4 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 4);" + System.lineSeparator() +
+                "CREATE TABLE myTable_h5 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 5);" + System.lineSeparator() +
+                "CREATE TABLE myTable_h6 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 6);" + System.lineSeparator() +
+                "CREATE TABLE myTable_h7 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 7);" + System.lineSeparator() +
+                "CREATE TABLE myTable_h8 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 8);" + System.lineSeparator() +
+                "CREATE TABLE myTable_h9 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 9);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h0_c6 ON myTable_h0 USING brin(c6);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h0_c7 ON myTable_h0 USING brin(c7);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h1_c6 ON myTable_h1 USING brin(c6);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h1_c7 ON myTable_h1 USING brin(c7);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h2_c6 ON myTable_h2 USING brin(c6);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h2_c7 ON myTable_h2 USING brin(c7);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h3_c6 ON myTable_h3 USING brin(c6);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h3_c7 ON myTable_h3 USING brin(c7);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h4_c6 ON myTable_h4 USING brin(c6);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h4_c7 ON myTable_h4 USING brin(c7);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h5_c6 ON myTable_h5 USING brin(c6);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h5_c7 ON myTable_h5 USING brin(c7);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h6_c6 ON myTable_h6 USING brin(c6);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h6_c7 ON myTable_h6 USING brin(c7);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h7_c6 ON myTable_h7 USING brin(c6);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h7_c7 ON myTable_h7 USING brin(c7);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h8_c6 ON myTable_h8 USING brin(c6);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h8_c7 ON myTable_h8 USING brin(c7);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h9_c6 ON myTable_h9 USING brin(c6);" + System.lineSeparator() +
+                "CREATE INDEX brin_myTable_h9_c7 ON myTable_h9 USING brin(c7);;" + System.lineSeparator() +
+                "CREATE EXTENSION IF NOT EXISTS bloom;" + System.lineSeparator() +
+                "CREATE INDEX bloom_myTable_h0 ON myTable_h0 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
+                "CREATE INDEX bloom_myTable_h1 ON myTable_h1 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
+                "CREATE INDEX bloom_myTable_h2 ON myTable_h2 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
+                "CREATE INDEX bloom_myTable_h3 ON myTable_h3 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
+                "CREATE INDEX bloom_myTable_h4 ON myTable_h4 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
+                "CREATE INDEX bloom_myTable_h5 ON myTable_h5 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
+                "CREATE INDEX bloom_myTable_h6 ON myTable_h6 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
+                "CREATE INDEX bloom_myTable_h7 ON myTable_h7 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
+                "CREATE INDEX bloom_myTable_h8 ON myTable_h8 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
+                "CREATE INDEX bloom_myTable_h9 ON myTable_h9 USING bloom(\"c1\",\"c2\");",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
 
@@ -118,17 +157,60 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     dialect = createDialect();
 
     assertEquals(
-        "CREATE TABLE myTable (\n"
-        + "c1 INT NOT NULL,\n"
-        + "c2 BIGINT NOT NULL,\n"
-        + "c3 TEXT NOT NULL,\n"
-        + "c4 TEXT NULL,\n"
-        + "c5 DATE DEFAULT '2001-03-15',\n"
-        + "c6 TIME DEFAULT '00:00:00.000',\n"
-        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 DECIMAL NULL,\n"
-        + "c9 BOOLEAN DEFAULT TRUE,\n"
-        + "PRIMARY KEY(c1))",
+            "CREATE TABLE myTable (" + System.lineSeparator() +
+                    "c1 INT NOT NULL," + System.lineSeparator() +
+                    "c2 BIGINT NOT NULL," + System.lineSeparator() +
+                    "c3 TEXT NOT NULL," + System.lineSeparator() +
+                    "c4 TEXT NULL," + System.lineSeparator() +
+                    "c5 DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+                    "c6 TIME DEFAULT '00:00:00.000'," + System.lineSeparator() +
+                    "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+                    "c8 DECIMAL NULL," + System.lineSeparator() +
+                    "c9 BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
+                    "event JSONB NOT NULL)" + System.lineSeparator() +
+                    System.lineSeparator() +
+                    "PARTITION BY HASH (c1);" + System.lineSeparator() +
+                    "CREATE TABLE myTable_h0 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 0);" + System.lineSeparator() +
+                    "CREATE TABLE myTable_h1 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 1);" + System.lineSeparator() +
+                    "CREATE TABLE myTable_h2 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 2);" + System.lineSeparator() +
+                    "CREATE TABLE myTable_h3 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 3);" + System.lineSeparator() +
+                    "CREATE TABLE myTable_h4 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 4);" + System.lineSeparator() +
+                    "CREATE TABLE myTable_h5 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 5);" + System.lineSeparator() +
+                    "CREATE TABLE myTable_h6 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 6);" + System.lineSeparator() +
+                    "CREATE TABLE myTable_h7 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 7);" + System.lineSeparator() +
+                    "CREATE TABLE myTable_h8 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 8);" + System.lineSeparator() +
+                    "CREATE TABLE myTable_h9 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 9);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h0_c6 ON myTable_h0 USING brin(c6);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h0_c7 ON myTable_h0 USING brin(c7);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h1_c6 ON myTable_h1 USING brin(c6);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h1_c7 ON myTable_h1 USING brin(c7);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h2_c6 ON myTable_h2 USING brin(c6);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h2_c7 ON myTable_h2 USING brin(c7);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h3_c6 ON myTable_h3 USING brin(c6);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h3_c7 ON myTable_h3 USING brin(c7);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h4_c6 ON myTable_h4 USING brin(c6);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h4_c7 ON myTable_h4 USING brin(c7);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h5_c6 ON myTable_h5 USING brin(c6);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h5_c7 ON myTable_h5 USING brin(c7);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h6_c6 ON myTable_h6 USING brin(c6);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h6_c7 ON myTable_h6 USING brin(c7);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h7_c6 ON myTable_h7 USING brin(c6);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h7_c7 ON myTable_h7 USING brin(c7);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h8_c6 ON myTable_h8 USING brin(c6);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h8_c7 ON myTable_h8 USING brin(c7);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h9_c6 ON myTable_h9 USING brin(c6);" + System.lineSeparator() +
+                    "CREATE INDEX brin_myTable_h9_c7 ON myTable_h9 USING brin(c7);;" + System.lineSeparator() +
+                    "CREATE EXTENSION IF NOT EXISTS bloom;" + System.lineSeparator() +
+                    "CREATE INDEX bloom_myTable_h0 ON myTable_h0 USING bloom(c1,c2);" + System.lineSeparator() +
+                    "CREATE INDEX bloom_myTable_h1 ON myTable_h1 USING bloom(c1,c2);" + System.lineSeparator() +
+                    "CREATE INDEX bloom_myTable_h2 ON myTable_h2 USING bloom(c1,c2);" + System.lineSeparator() +
+                    "CREATE INDEX bloom_myTable_h3 ON myTable_h3 USING bloom(c1,c2);" + System.lineSeparator() +
+                    "CREATE INDEX bloom_myTable_h4 ON myTable_h4 USING bloom(c1,c2);" + System.lineSeparator() +
+                    "CREATE INDEX bloom_myTable_h5 ON myTable_h5 USING bloom(c1,c2);" + System.lineSeparator() +
+                    "CREATE INDEX bloom_myTable_h6 ON myTable_h6 USING bloom(c1,c2);" + System.lineSeparator() +
+                    "CREATE INDEX bloom_myTable_h7 ON myTable_h7 USING bloom(c1,c2);" + System.lineSeparator() +
+                    "CREATE INDEX bloom_myTable_h8 ON myTable_h8 USING bloom(c1,c2);" + System.lineSeparator() +
+                    "CREATE INDEX bloom_myTable_h9 ON myTable_h9 USING bloom(c1,c2);",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
   }
@@ -137,16 +219,17 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   public void shouldBuildAlterTableStatement() {
     assertEquals(
         Arrays.asList(
-            "ALTER TABLE \"myTable\" \n"
-            + "ADD \"c1\" INT NOT NULL,\n"
-            + "ADD \"c2\" BIGINT NOT NULL,\n"
-            + "ADD \"c3\" TEXT NOT NULL,\n"
-            + "ADD \"c4\" TEXT NULL,\n"
-            + "ADD \"c5\" DATE DEFAULT '2001-03-15',\n"
-            + "ADD \"c6\" TIME DEFAULT '00:00:00.000',\n"
-            + "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "ADD \"c8\" DECIMAL NULL,\n"
-            + "ADD \"c9\" BOOLEAN DEFAULT TRUE"
+            "ALTER TABLE \"myTable\" " + System.lineSeparator() +
+             "ADD \"c1\" INT NOT NULL," + System.lineSeparator() +
+             "ADD \"c2\" BIGINT NOT NULL," + System.lineSeparator() +
+             "ADD \"c3\" TEXT NOT NULL," + System.lineSeparator() +
+             "ADD \"c4\" TEXT NULL," + System.lineSeparator() +
+             "ADD \"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+             "ADD \"c6\" TIME DEFAULT '00:00:00.000'," + System.lineSeparator() +
+             "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+             "ADD \"c8\" DECIMAL NULL," + System.lineSeparator() +
+             "ADD \"c9\" BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
+             "ADD \"event\" JSONB NOT NULL"
         ),
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -156,73 +239,82 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     assertEquals(
         Arrays.asList(
-            "ALTER TABLE myTable \n"
-            + "ADD c1 INT NOT NULL,\n"
-            + "ADD c2 BIGINT NOT NULL,\n"
-            + "ADD c3 TEXT NOT NULL,\n"
-            + "ADD c4 TEXT NULL,\n"
-            + "ADD c5 DATE DEFAULT '2001-03-15',\n"
-            + "ADD c6 TIME DEFAULT '00:00:00.000',\n"
-            + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "ADD c8 DECIMAL NULL,\n"
-            + "ADD c9 BOOLEAN DEFAULT TRUE"
+                "ALTER TABLE myTable " + System.lineSeparator() +
+                "ADD c1 INT NOT NULL," + System.lineSeparator() +
+                "ADD c2 BIGINT NOT NULL," + System.lineSeparator() +
+                "ADD c3 TEXT NOT NULL," + System.lineSeparator() +
+                "ADD c4 TEXT NULL," + System.lineSeparator() +
+                "ADD c5 DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+                "ADD c6 TIME DEFAULT '00:00:00.000'," + System.lineSeparator() +
+                "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+                "ADD c8 DECIMAL NULL," + System.lineSeparator() +
+                "ADD c9 BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
+                "ADD event JSONB NOT NULL"
         ),
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
   }
 
   @Test
-  public void shouldBuildUpsertStatement() {
+  public void shouldBuildInsertStatement() {
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
+    builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnB").type("varchar", JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnC").type("varchar", JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnD").type("jsonb", JDBCType.OTHER, String.class);
+    TableDefinition tableDefn = builder.build();
     assertEquals(
-        "INSERT INTO \"myTable\" (\"id1\",\"id2\",\"columnA\",\"columnB\"," +
-        "\"columnC\",\"columnD\") VALUES (?,?,?,?,?,?) ON CONFLICT (\"id1\"," +
-        "\"id2\") DO UPDATE SET \"columnA\"=EXCLUDED" +
-        ".\"columnA\",\"columnB\"=EXCLUDED.\"columnB\",\"columnC\"=EXCLUDED" +
-        ".\"columnC\",\"columnD\"=EXCLUDED.\"columnD\"",
-        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+        "INSERT INTO \"myTable\" (\"columnA\",\"columnB\"," +
+        "\"columnC\",\"columnD\") VALUES (?,?,?,?::jsonb)",
+        dialect.buildInsertStatement(tableId, columnsAtoD, tableDefn)
     );
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     assertEquals(
-        "INSERT INTO myTable (id1,id2,columnA,columnB," +
-        "columnC,columnD) VALUES (?,?,?,?,?,?) ON CONFLICT (id1," +
-        "id2) DO UPDATE SET columnA=EXCLUDED" +
-        ".columnA,columnB=EXCLUDED.columnB,columnC=EXCLUDED" +
-        ".columnC,columnD=EXCLUDED.columnD",
-        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+        "INSERT INTO myTable (columnA,columnB," +
+        "columnC,columnD) VALUES (?,?,?,?::jsonb)",
+        dialect.buildInsertStatement(tableId, columnsAtoD, tableDefn)
+    );
+
+    builder = new TableDefinitionBuilder().withTable("myTable");
+    builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, Integer.class);
+    builder.withColumn("uuidColumn").type("uuid", JDBCType.OTHER, UUID.class);
+    builder.withColumn("dateColumn").type("date", JDBCType.DATE, java.sql.Date.class);
+    builder.withColumn("event").type("jsonb", JDBCType.OTHER, String.class);
+    tableDefn = builder.build();
+    List<ColumnId> nonPkColumns = new ArrayList<>();
+    nonPkColumns.add(new ColumnId(tableId, "columnA"));
+    nonPkColumns.add(new ColumnId(tableId, "uuidColumn"));
+    nonPkColumns.add(new ColumnId(tableId, "dateColumn"));
+    nonPkColumns.add(new ColumnId(tableId, "event"));
+    assertEquals(
+        "INSERT INTO myTable (" +
+        "columnA,uuidColumn,dateColumn,event" +
+        ") VALUES (?,?::uuid,?,?::jsonb)",
+        dialect.buildInsertStatement(tableId, nonPkColumns, tableDefn)
     );
   }
 
   @Test
-  public void createOneColNoPk() {
-    verifyCreateOneColNoPk(
-        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"col1\" INT NOT NULL)");
+  public void shouldComputeValueTypeCast() {
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
+    builder.withColumn("id1").type("int", JDBCType.INTEGER, Integer.class);
+    builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
+    builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, Integer.class);
+    builder.withColumn("uuidColumn").type("uuid", JDBCType.OTHER, UUID.class);
+    builder.withColumn("dateColumn").type("date", JDBCType.DATE, java.sql.Date.class);
+    TableDefinition tableDefn = builder.build();
+    ColumnId uuidColumn = tableDefn.definitionForColumn("uuidColumn").id();
+    ColumnId dateColumn = tableDefn.definitionForColumn("dateColumn").id();
+    assertEquals("", dialect.valueTypeCast(tableDefn, columnPK1));
+    assertEquals("", dialect.valueTypeCast(tableDefn, columnPK2));
+    assertEquals("", dialect.valueTypeCast(tableDefn, columnA));
+    assertEquals("::uuid", dialect.valueTypeCast(tableDefn, uuidColumn));
+    assertEquals("", dialect.valueTypeCast(tableDefn, dateColumn));
   }
 
-  @Test
-  public void createOneColOnePk() {
-    verifyCreateOneColOnePk(
-        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INT NOT NULL," +
-        System.lineSeparator() + "PRIMARY KEY(\"pk1\"))");
-  }
-
-  @Test
-  public void createThreeColTwoPk() {
-    verifyCreateThreeColTwoPk(
-        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INT NOT NULL," +
-        System.lineSeparator() + "\"pk2\" INT NOT NULL," + System.lineSeparator() +
-        "\"col1\" INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
-
-    quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    verifyCreateThreeColTwoPk(
-        "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INT NOT NULL," +
-        System.lineSeparator() + "pk2 INT NOT NULL," + System.lineSeparator() +
-        "col1 INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
-  }
 
   @Test
   public void alterAddOneCol() {
@@ -234,55 +326,6 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     verifyAlterAddTwoCols(
         "ALTER TABLE \"myTable\" " + System.lineSeparator() + "ADD \"newcol1\" INT NULL," +
         System.lineSeparator() + "ADD \"newcol2\" INT DEFAULT 42");
-  }
-
-  @Test
-  public void upsert() {
-    TableId customer = tableId("Customer");
-    assertEquals(
-        "INSERT INTO \"Customer\" (\"id\",\"name\",\"salary\",\"address\") " +
-         "VALUES (?,?,?,?) ON CONFLICT (\"id\") DO UPDATE SET \"name\"=EXCLUDED.\"name\"," +
-         "\"salary\"=EXCLUDED.\"salary\",\"address\"=EXCLUDED.\"address\"",
-        dialect.buildUpsertQueryStatement(
-            customer,
-            columns(customer, "id"),
-            columns(customer, "name", "salary", "address")
-        )
-    );
-
-    assertEquals(
-            "INSERT INTO \"Customer\" (\"id\",\"name\",\"salary\",\"address\") " +
-                    "VALUES (?,?,?,?) ON CONFLICT (\"id\",\"name\",\"salary\",\"address\") DO NOTHING",
-            dialect.buildUpsertQueryStatement(
-                    customer,
-                    columns(customer, "id", "name", "salary", "address"),
-                    columns(customer)
-            )
-    );
-
-    quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    assertEquals(
-        "INSERT INTO Customer (id,name,salary,address) " +
-        "VALUES (?,?,?,?) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name," +
-        "salary=EXCLUDED.salary,address=EXCLUDED.address",
-        dialect.buildUpsertQueryStatement(
-            customer,
-            columns(customer, "id"),
-            columns(customer, "name", "salary", "address")
-        )
-    );
-
-    assertEquals(
-            "INSERT INTO Customer (id,name,salary,address) " +
-                    "VALUES (?,?,?,?) ON CONFLICT (id,name,salary,address) DO NOTHING",
-            dialect.buildUpsertQueryStatement(
-                    customer,
-                    columns(customer, "id", "name", "salary", "address"),
-                    columns(customer)
-            )
-    );
   }
 
   @Test

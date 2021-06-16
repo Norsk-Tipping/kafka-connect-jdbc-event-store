@@ -15,20 +15,12 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import io.confluent.connect.jdbc.source.ColumnMapping;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
-import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
-import java.sql.Types;
-import java.time.ZoneOffset;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.util.*;
 import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.After;
 import org.junit.Before;
@@ -39,33 +31,14 @@ import java.nio.ByteBuffer;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Calendar;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.GregorianCalendar;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.TimeZone;
+import java.sql.Types;
+import java.time.ZoneOffset;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
-import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.TableId;
-
-import static junit.framework.TestCase.assertNotNull;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
 
@@ -135,7 +108,8 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     SinkRecordField f7 = new SinkRecordField(optionalTsWithDefault, "c7", false);
     SinkRecordField f8 = new SinkRecordField(optionalDecimal, "c8", false);
     SinkRecordField f9 = new SinkRecordField(booleanWithDefault, "c9", false);
-    sinkRecordFields = Arrays.asList(f1, f2, f3, f4, f5, f6, f7, f8, f9);
+    SinkRecordField f10 = new SinkRecordField(Schema.STRING_SCHEMA, "event", false);
+    sinkRecordFields = Arrays.asList(f1, f2, f3, f4, f5, f6, f7, f8, f9, f10);
 
     dialect = createDialect();
   }
@@ -159,7 +133,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
    * @param propertyPairs optional set of config name-value pairs; must be an even number
    * @return the config; never null
    */
-  protected JdbcSourceConnectorConfig sourceConfigWithUrl(
+  protected JdbcSinkConfig sourceConfigWithUrl(
       String url,
       String... propertyPairs
   ) {
@@ -171,7 +145,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     if (quoteIdentfiiers != null) {
       connProps.put("quote.sql.identifiers", quoteIdentfiiers.toString());
     }
-    return new JdbcSourceConnectorConfig(connProps);
+    return new JdbcSinkConfig(connProps);
   }
 
   /**
@@ -188,6 +162,9 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     Map<String, String> connProps = new HashMap<>();
     connProps.putAll(propertiesFromPairs(propertyPairs));
     connProps.put(JdbcSinkConfig.CONNECTION_URL, url);
+    if (quoteIdentfiiers != null) {
+      connProps.put("quote.sql.identifiers", quoteIdentfiiers.toString());
+    }
     return new JdbcSinkConfig(connProps);
   }
 
@@ -224,6 +201,13 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     assertMapping(expectedSqlType, schema.type(), schema.name(), schema.parameters());
   }
 
+  protected void assertJsonMapping(
+          String expectedSqlType,
+          Schema schema
+  ) {
+    assertMapping(expectedSqlType, schema.type(), "event", schema.parameters());
+  }
+
   protected void assertMapping(
       String expectedSqlType,
       Schema.Type type,
@@ -249,83 +233,6 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   ) {
     Map<String, String> schemaProps = propertiesFromPairs(schemaParamPairs);
     assertMapping(expectedSqlType, type, schemaName, schemaProps);
-  }
-
-  /**
-   * Verify that column converters are defined and return non-null converter objects.
-   * These are inherited by most dialects from {@link GenericDatabaseDialect}, but cannot live
-   * inside {@link GenericDatabaseDialectTest} because specific dialect tests don't inherit from
-   * the generic test class.
-   */
-  @Test
-  public void testGenericColumnConverters() {
-    assertColumnConverter(Types.BOOLEAN, null, Schema.BOOLEAN_SCHEMA, Boolean.class);
-    assertColumnConverter(Types.BIT, null, Schema.INT8_SCHEMA, Byte.class);
-    assertColumnConverter(Types.TINYINT, null, Schema.INT8_SCHEMA, Byte.class);
-    assertColumnConverter(Types.SMALLINT, null, Schema.INT16_SCHEMA, Short.class);
-    assertColumnConverter(Types.INTEGER, null, Schema.INT32_SCHEMA, Integer.class);
-    assertColumnConverter(Types.BIGINT, null, Schema.INT64_SCHEMA, Long.class);
-    assertColumnConverter(Types.REAL, null, Schema.FLOAT32_SCHEMA, Float.class);
-    assertColumnConverter(Types.FLOAT, null, Schema.FLOAT64_SCHEMA, Double.class);
-    assertColumnConverter(Types.DOUBLE, null, Schema.FLOAT64_SCHEMA, Double.class);
-    assertColumnConverter(Types.NUMERIC, null, Schema.INT8_SCHEMA, Integer.class); // assume 0 precision and 0 scale
-    assertColumnConverter(Types.DECIMAL, null, Decimal.schema(0), Decimal.class);
-    assertColumnConverter(Types.CHAR, null, Schema.STRING_SCHEMA, String.class);
-    assertColumnConverter(Types.VARCHAR, null, Schema.STRING_SCHEMA, String.class);
-    assertColumnConverter(Types.LONGVARCHAR, null, Schema.STRING_SCHEMA, String.class);
-    assertColumnConverter(Types.NCHAR, null, Schema.STRING_SCHEMA, String.class);
-    assertColumnConverter(Types.NVARCHAR, null, Schema.STRING_SCHEMA, String.class);
-    assertColumnConverter(Types.LONGNVARCHAR, null, Schema.STRING_SCHEMA, String.class);
-    assertColumnConverter(Types.CLOB, null, Schema.STRING_SCHEMA, String.class);
-    assertColumnConverter(Types.NCLOB, null, Schema.STRING_SCHEMA, String.class);
-    assertColumnConverter(Types.DATALINK, null, Schema.STRING_SCHEMA, String.class);
-    assertColumnConverter(Types.SQLXML, null, Schema.STRING_SCHEMA, String.class);
-    assertColumnConverter(Types.BINARY, null, Schema.BYTES_SCHEMA, byte[].class);
-    assertColumnConverter(Types.BLOB, null, Schema.BYTES_SCHEMA, byte[].class);
-    assertColumnConverter(Types.VARBINARY, null, Schema.BYTES_SCHEMA, byte[].class);
-    assertColumnConverter(Types.LONGVARBINARY, null, Schema.BYTES_SCHEMA, byte[].class);
-    assertColumnConverter(Types.DATE, null, Date.SCHEMA, java.sql.Date.class);
-    assertColumnConverter(Types.TIME, null, Time.SCHEMA, java.sql.Time.class);
-    assertColumnConverter(Types.TIMESTAMP, null, Timestamp.SCHEMA, java.sql.Timestamp.class);
-  }
-
-
-  protected void assertColumnConverter(
-      int jdbcType,
-      String typeName,
-      Schema schema,
-      Class<?> clazz) {
-    ColumnMapping mapping = new ColumnMapping(
-        new ColumnDefinition(
-            columnA,
-            jdbcType,
-            typeName,
-            clazz.getCanonicalName(),
-            Nullability.NOT_NULL,
-            Mutability.UNKNOWN,
-            0,
-            0,
-            false,
-            1,
-            false,
-            false,
-            false,
-            false,
-            false
-        ),
-        1,
-        new Field(
-            "b",
-            1,
-            schema
-        )
-    );
-    assertNotNull(dialect.columnConverterFor(
-        mapping,
-        mapping.columnDefn(),
-        mapping.columnNumber(),
-        true
-    ));
   }
 
 
@@ -365,19 +272,20 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   }
 
   protected void verifyDataTypeMapping(String expected, Schema schema) {
-    SinkRecordField field = new SinkRecordField(schema, schema.name(),schema.isOptional());
+    SinkRecordField field = new SinkRecordField(schema, schema.name(), schema.isOptional());
     assertEquals(expected, dialect.getSqlType(field));
   }
 
   protected void verifyCreateOneColNoPk(String expected) {
     assertEquals(expected, dialect.buildCreateTableStatement(tableId, Arrays.asList(
-        new SinkRecordField(Schema.INT32_SCHEMA, "col1", false)
+        new SinkRecordField(Schema.STRING_SCHEMA, "event", false)
     )));
   }
 
   protected void verifyCreateOneColOnePk(String expected) {
     assertEquals(expected, dialect.buildCreateTableStatement(tableId, Arrays.asList(
-        new SinkRecordField(Schema.INT32_SCHEMA, "pk1", true)
+        new SinkRecordField(Schema.INT32_SCHEMA, "pk1", true),
+        new SinkRecordField(Schema.STRING_SCHEMA, "event", false)
     )));
   }
 
@@ -391,7 +299,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     assertEquals(expected, dialect.buildCreateTableStatement(tableId, Arrays.asList(
         new SinkRecordField(Schema.INT32_SCHEMA, "pk1", true),
         new SinkRecordField(Schema.INT32_SCHEMA, "pk2", true),
-        new SinkRecordField(Schema.INT32_SCHEMA, "col1", false)
+        new SinkRecordField(Schema.STRING_SCHEMA, "event", false)
     )));
   }
 

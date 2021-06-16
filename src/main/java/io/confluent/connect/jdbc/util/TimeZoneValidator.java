@@ -15,11 +15,11 @@
 
 package io.confluent.connect.jdbc.util;
 
-import java.util.Arrays;
-import java.util.TimeZone;
-
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
+
+import java.util.Arrays;
+import java.util.TimeZone;
 
 public class TimeZoneValidator implements ConfigDef.Validator {
 

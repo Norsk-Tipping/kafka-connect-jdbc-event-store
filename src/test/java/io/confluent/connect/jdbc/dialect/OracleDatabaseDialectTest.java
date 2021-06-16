@@ -15,43 +15,35 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.QuoteMethod;
+import org.apache.kafka.connect.data.*;
+import org.apache.kafka.connect.data.Schema.Type;
+import org.junit.Test;
+
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
-import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
-import java.time.ZoneOffset;
-import java.util.Calendar;
-import java.util.TimeZone;
 import java.util.concurrent.ThreadLocalRandom;
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Schema.Type;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
-import org.junit.Test;
-
-import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDialect> {
 
   @Override
   protected OracleDatabaseDialect createDialect() {
-    return new OracleDatabaseDialect(sourceConfigWithUrl("jdbc:oracle:thin://something"));
+    return new OracleDatabaseDialect(sinkConfigWithUrl("jdbc:oracle:thin://something",
+            JdbcSinkConfig.DISTRIBUTIONATTRIBUTES, "c1",
+            JdbcSinkConfig.ZONEMAPATTRIBUTES, "c6,c7",
+            JdbcSinkConfig.CLUSTEREDATTRIBUTES, "c1, c2"
+            ));
   }
 
   @Override
@@ -80,6 +72,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     assertPrimitiveMapping(Type.BOOLEAN, "NUMBER(1,0)");
     assertPrimitiveMapping(Type.BYTES, "BLOB");
     assertPrimitiveMapping(Type.STRING, "CLOB");
+    assertJsonMapping("BLOB", Schema.STRING_SCHEMA);
   }
 
   @Test
@@ -125,14 +118,28 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
   @Test
   public void shouldBuildCreateQueryStatement() {
-    String expected = "CREATE TABLE \"myTable\" (\n" + "\"c1\" NUMBER(10,0) NOT NULL,\n" +
-                      "\"c2\" NUMBER(19,0) NOT NULL,\n" + "\"c3\" CLOB NOT NULL,\n" +
-                      "\"c4\" CLOB NULL,\n" + "\"c5\" DATE DEFAULT '2001-03-15',\n" +
-                      "\"c6\" DATE DEFAULT '00:00:00.000',\n" +
-                      "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-                      "\"c8\" NUMBER(*,4) NULL,\n" +
-                      "\"c9\" NUMBER(1,0) DEFAULT 1,\n" +
-                      "PRIMARY KEY(\"c1\"))";
+    String expected = "CREATE TABLE \"myTable\" ("+ System.lineSeparator() + "\"c1\" NUMBER(10,0) NOT NULL,"+ System.lineSeparator() +
+                      "\"c2\" NUMBER(19,0) NOT NULL," + System.lineSeparator() + "\"c3\" CLOB NOT NULL," + System.lineSeparator() +
+                      "\"c4\" CLOB NULL," + System.lineSeparator() + "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+                      "\"c6\" DATE DEFAULT '00:00:00.000'," + System.lineSeparator() +
+                      "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+                      "\"c8\" NUMBER(*,4) NULL," + System.lineSeparator() +
+                      "\"c9\" NUMBER(1,0) DEFAULT 1," + System.lineSeparator() +
+                      "\"event\" BLOB NOT NULL," + System.lineSeparator() +
+                      "CONSTRAINT myTable_ensure_json CHECK (\"event\" IS JSON))" + System.lineSeparator() +
+                      "PARTITION BY HASH (\"c1\")(" + System.lineSeparator() +
+                      "PARTITION myTable_h0," + System.lineSeparator() +
+                      "PARTITION myTable_h1," + System.lineSeparator() +
+                      "PARTITION myTable_h2," + System.lineSeparator() +
+                      "PARTITION myTable_h3," + System.lineSeparator() +
+                      "PARTITION myTable_h4," + System.lineSeparator() +
+                      "PARTITION myTable_h5," + System.lineSeparator() +
+                      "PARTITION myTable_h6," + System.lineSeparator() +
+                      "PARTITION myTable_h7," + System.lineSeparator() +
+                      "PARTITION myTable_h8," + System.lineSeparator() +
+                      "PARTITION myTable_h9)" + System.lineSeparator() +
+                      "CLUSTERING BY INTERLEAVED ORDER (\"c1\",\"c2\");" + System.lineSeparator() +
+                      "CREATE MATERIALIZED ZONEMAP myTable_zmap ON \"myTable\" (\"c6\",\"c7\");";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
   }
@@ -141,16 +148,17 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   public void shouldBuildAlterTableStatement() {
     assertStatements(
         new String[]{
-            "ALTER TABLE \"myTable\" ADD(\n" +
-            "\"c1\" NUMBER(10,0) NOT NULL,\n" +
-            "\"c2\" NUMBER(19,0) NOT NULL,\n" +
-            "\"c3\" CLOB NOT NULL,\n" +
-            "\"c4\" CLOB NULL,\n" +
-            "\"c5\" DATE DEFAULT '2001-03-15',\n" +
-            "\"c6\" DATE DEFAULT '00:00:00.000',\n" +
-            "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-            "\"c8\" NUMBER(*,4) NULL,\n" +
-            "\"c9\" NUMBER(1,0) DEFAULT 1)"
+            "ALTER TABLE \"myTable\" ADD(" + System.lineSeparator() +
+            "\"c1\" NUMBER(10,0) NOT NULL," + System.lineSeparator() +
+            "\"c2\" NUMBER(19,0) NOT NULL," + System.lineSeparator() +
+            "\"c3\" CLOB NOT NULL," + System.lineSeparator() +
+            "\"c4\" CLOB NULL," + System.lineSeparator() +
+            "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+            "\"c6\" DATE DEFAULT '00:00:00.000'," + System.lineSeparator() +
+            "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+            "\"c8\" NUMBER(*,4) NULL," + System.lineSeparator() +
+            "\"c9\" NUMBER(1,0) DEFAULT 1," + System.lineSeparator() +
+            "\"event\" BLOB NOT NULL)"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -160,68 +168,22 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
     assertStatements(
         new String[]{
-            "ALTER TABLE myTable ADD(\n" +
-            "c1 NUMBER(10,0) NOT NULL,\n" +
-            "c2 NUMBER(19,0) NOT NULL,\n" +
-            "c3 CLOB NOT NULL,\n" +
-            "c4 CLOB NULL,\n" +
-            "c5 DATE DEFAULT '2001-03-15',\n" +
-            "c6 DATE DEFAULT '00:00:00.000',\n" +
-            "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-            "c8 NUMBER(*,4) NULL,\n" +
-            "c9 NUMBER(1,0) DEFAULT 1)"
+            "ALTER TABLE myTable ADD(" + System.lineSeparator() +
+            "c1 NUMBER(10,0) NOT NULL," + System.lineSeparator() +
+            "c2 NUMBER(19,0) NOT NULL," + System.lineSeparator() +
+            "c3 CLOB NOT NULL," + System.lineSeparator() +
+            "c4 CLOB NULL," + System.lineSeparator() +
+            "c5 DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+            "c6 DATE DEFAULT '00:00:00.000'," + System.lineSeparator() +
+            "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+            "c8 NUMBER(*,4) NULL," + System.lineSeparator() +
+            "c9 NUMBER(1,0) DEFAULT 1," + System.lineSeparator() +
+            "event BLOB NOT NULL)"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
   }
 
-  @Test
-  public void shouldBuildUpsertStatement() {
-    String expected = "merge into \"myTable\" using (select ? \"id1\", ? \"id2\", ? \"columnA\", " +
-                      "? \"columnB\", ? \"columnC\", ? \"columnD\" FROM dual) incoming on" +
-                      "(\"myTable\".\"id1\"=incoming.\"id1\" and \"myTable\".\"id2\"=incoming" +
-                      ".\"id2\") when matched then update set \"myTable\".\"columnA\"=incoming" +
-                      ".\"columnA\",\"myTable\".\"columnB\"=incoming.\"columnB\",\"myTable\"" +
-                      ".\"columnC\"=incoming.\"columnC\",\"myTable\".\"columnD\"=incoming" +
-                      ".\"columnD\" when not matched then insert(\"myTable\".\"columnA\"," +
-                      "\"myTable\".\"columnB\",\"myTable\".\"columnC\",\"myTable\".\"columnD\"," +
-                      "\"myTable\".\"id1\",\"myTable\".\"id2\") values(incoming.\"columnA\"," +
-                      "incoming.\"columnB\",incoming.\"columnC\",incoming.\"columnD\",incoming" +
-                      ".\"id1\",incoming.\"id2\")";
-    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
-    assertEquals(expected, sql);
-  }
-
-  @Test
-  public void createOneColNoPk() {
-    verifyCreateOneColNoPk(
-        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"col1\" NUMBER(10,0) NOT NULL)");
-  }
-
-  @Test
-  public void createOneColOnePk() {
-    verifyCreateOneColOnePk(
-        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" NUMBER(10,0) NOT NULL," +
-        System.lineSeparator() + "PRIMARY KEY(\"pk1\"))");
-  }
-
-  @Test
-  public void createThreeColTwoPk() {
-    verifyCreateThreeColTwoPk(
-        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" NUMBER(10,0) NOT NULL," +
-        System.lineSeparator() + "\"pk2\" NUMBER(10,0) NOT NULL," + System.lineSeparator() +
-        "\"col1\" NUMBER(10,0) NOT NULL," + System.lineSeparator() +
-        "PRIMARY KEY(\"pk1\",\"pk2\"))");
-
-    quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    verifyCreateThreeColTwoPk(
-        "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 NUMBER(10,0) NOT NULL," +
-        System.lineSeparator() + "pk2 NUMBER(10,0) NOT NULL," + System.lineSeparator() +
-        "col1 NUMBER(10,0) NOT NULL," + System.lineSeparator() +
-        "PRIMARY KEY(pk1,pk2))");
-  }
 
   @Test
   public void alterAddOneCol() {
@@ -237,21 +199,6 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
         System.lineSeparator() + "\"newcol2\" NUMBER(10,0) DEFAULT 42)");
   }
 
-  @Test
-  public void upsert() {
-    TableId article = tableId("ARTICLE");
-    String expected = "merge into \"ARTICLE\" " +
-                      "using (select ? \"title\", ? \"author\", ? \"body\" FROM dual) incoming on" +
-                      "(\"ARTICLE\".\"title\"=incoming.\"title\" and \"ARTICLE\"" +
-                      ".\"author\"=incoming.\"author\") " +
-                      "when matched then update set \"ARTICLE\".\"body\"=incoming.\"body\" " +
-                      "when not matched then insert(\"ARTICLE\".\"body\",\"ARTICLE\".\"title\"," +
-                      "\"ARTICLE\".\"author\") " +
-                      "values(incoming.\"body\",incoming.\"title\",incoming.\"author\")";
-    String actual = dialect.buildUpsertQueryStatement(article, columns(article, "title", "author"),
-                                                      columns(article, "body"));
-    assertEquals(expected, actual);
-  }
 
   @Test
   public void shouldSanitizeUrlWithCredentialsInHosts() {

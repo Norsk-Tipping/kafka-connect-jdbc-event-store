@@ -18,11 +18,7 @@ package io.confluent.connect.jdbc.dialect;
 import org.apache.kafka.common.config.AbstractConfig;
 
 import java.sql.Connection;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Locale;
-import java.util.Set;
+import java.util.*;
 
 /**
  * An abstract provider of {@link DatabaseDialect} instances, and used to {@link
@@ -51,12 +47,15 @@ public abstract class DatabaseDialectProvider {
    *
    * <p>The format of a JDBC URL is defined by the JDBC 4.2 specification as:
    * <pre>
-   * jdbc:&lt;subprotocol>:&lt;subname>
+   * jdbc:&lt;subprotocol:&gt;:&lt;subname:&gt;
    * </pre>
    *
    * <p>where {@code subprotocol} defines the kind of database connectivity mechanism that may be
    * supported by one or more drivers. The contents and syntax of the {@code subname} will depend on
    * the subprotocol.
+   */
+  /**
+   *
    */
   public interface JdbcUrlInfo {
 

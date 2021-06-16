@@ -15,11 +15,7 @@
 
 package io.confluent.connect.jdbc.util;
 
-import java.util.Collection;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 
 /**
  * A description of a table.

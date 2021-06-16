@@ -15,123 +15,159 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import static org.easymock.EasyMock.expectLastCall;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
+import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig;
+import io.confluent.kafka.serializers.KafkaAvroSerializer;
+import no.norsktipping.kafka.connect.converter.JsonConverter;
+import no.norsktipping.kafka.connect.converter.JsonConverterConfig;
+import org.apache.avro.LogicalTypes;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericRecordBuilder;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaAndValue;
+import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.RetriableException;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
+import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
+import org.easymock.EasyMockSupport;
+import org.json.JSONObject;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.ZoneOffset;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.TimeZone;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.data.Timestamp;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.errors.RetriableException;
-import org.apache.kafka.connect.sink.SinkRecord;
-import org.apache.kafka.connect.sink.SinkTaskContext;
-import org.easymock.EasyMockSupport;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-
-import io.confluent.connect.jdbc.util.DateTimeUtils;
+import static io.confluent.connect.jdbc.sink.PostgresqlHelper.tablesUsed;
+import static org.easymock.EasyMock.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
-  private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
+  private final PostgresqlHelper postgresqlHelper = new PostgresqlHelper(getClass().getSimpleName());
+  private final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
+  private final SinkTaskContext ctx = createMock(SinkTaskContext.class);
+  private JsonConverter converter = null;
 
-  private static final Schema SCHEMA = SchemaBuilder.struct().name("com.example.Person")
-      .field("firstName", Schema.STRING_SCHEMA)
-      .field("lastName", Schema.STRING_SCHEMA)
-      .field("age", Schema.OPTIONAL_INT32_SCHEMA)
-      .field("bool", Schema.OPTIONAL_BOOLEAN_SCHEMA)
-      .field("short", Schema.OPTIONAL_INT16_SCHEMA)
-      .field("byte", Schema.OPTIONAL_INT8_SCHEMA)
-      .field("long", Schema.OPTIONAL_INT64_SCHEMA)
-      .field("float", Schema.OPTIONAL_FLOAT32_SCHEMA)
-      .field("double", Schema.OPTIONAL_FLOAT64_SCHEMA)
-      .field("modified", Timestamp.SCHEMA)
-      .build();
+  private static final SinkRecord RECORD = new SinkRecord(
+      "stub",
+      0,
+      null,
+      null,
+      null,
+      null,
+      0
+  );
+
+  private static final org.apache.avro.Schema timestampMilliType = LogicalTypes.timestampMillis().addToSchema(org.apache.avro.Schema.create(org.apache.avro.Schema.Type.LONG));
+
+  private static final org.apache.avro.Schema avroSchema = org.apache.avro.SchemaBuilder.record("com.example.Person").fields()
+          .requiredString("firstName")
+          .requiredString("lastName")
+          .optionalInt("age")
+          .optionalBoolean("bool")
+          .optionalInt("short")
+          .optionalInt("byte")
+          .optionalLong("long")
+          .optionalFloat("float")
+          .optionalDouble("double")
+          .name("modified").type(timestampMilliType).noDefault()
+          .endRecord();
+  private static final Schema expectedSchema = SchemaBuilder.struct()
+          .field("event", Schema.STRING_SCHEMA).version(1).build();
+
+  private static  MockSchemaRegistryClient schemaRegistry;
+  private static  KafkaAvroSerializer serializer;
+  private static String topic;
 
   @Before
   public void setUp() throws IOException, SQLException {
-    sqliteHelper.setUp();
+    postgresqlHelper.setUp();
+    topic = "atopic";
+    tablesUsed.add(topic);
+
+    Map<String, String> map = Stream.of(
+            new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "Person"),
+            new AbstractMap.SimpleImmutableEntry<>("Person.modified", "modified"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.PAYLOAD_FIELD_NAME, "event"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.INPUT_FORMAT, "avro")
+    )
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    schemaRegistry = new MockSchemaRegistryClient();
+    converter = new JsonConverter(schemaRegistry);
+    converter.configure(map, false);
+    serializer = new KafkaAvroSerializer(schemaRegistry);
+    serializer.configure(Collections.singletonMap(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"), false);
   }
 
   @After
   public void tearDown() throws IOException, SQLException {
-    sqliteHelper.tearDown();
+    postgresqlHelper.tearDown();
   }
 
   @Test
-  public void putPropagatesToDbWithAutoCreateAndPkModeKafka() throws Exception {
+  public void putPropagatesToDbWithAutoCreateAndKafkaCoordinates() throws Exception {
     Map<String, String> props = new HashMap<>();
-    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("connection.url", postgresqlHelper.postgreSQL());
     props.put("auto.create", "true");
-    props.put("pk.mode", "kafka");
-    props.put("pk.fields", "kafka_topic,kafka_partition,kafka_offset");
+    props.put("auto.evolve", "true");
+    props.put("coordinates.enabled", "true");
     String timeZoneID = "America/Los_Angeles";
     TimeZone timeZone = TimeZone.getTimeZone(timeZoneID);
     props.put("db.timezone", timeZoneID);
+    props.put("connection.user", "postgres");
+    props.put("connection.password", "password123");
 
     JdbcSinkTask task = new JdbcSinkTask();
-    task.initialize(mock(SinkTaskContext.class));
+    SinkTaskContext sinkTaskContextMock = mock(SinkTaskContext.class);
+    task.initialize(sinkTaskContextMock);
 
     task.start(props);
 
-    final Struct struct = new Struct(SCHEMA)
-        .put("firstName", "Alex")
-        .put("lastName", "Smith")
-        .put("bool", true)
-        .put("short", (short) 1234)
-        .put("byte", (byte) -32)
-        .put("long", 12425436L)
-        .put("float", (float) 2356.3)
-        .put("double", -2436546.56457)
-        .put("age", 21)
-        .put("modified", new Date(1474661402123L));
+    GenericData.Record struct = new GenericRecordBuilder(avroSchema)
+        .set("firstName", "Alex")
+        .set("lastName", "Smith")
+        .set("bool", true)
+        .set("short", 1234)
+        .set("byte", -32)
+        .set("long", 12425436L)
+        .set("float", (float) 2356.3)
+        .set("double", -2436546.56457)
+        .set("age", 21)
+        .set("modified", 1474661402123L)
+        .build();
 
-    final String topic = "atopic";
+    schemaRegistry.register(topic+ "-value", avroSchema);
+    String expected = struct.toString();
 
+    SchemaAndValue schemaAndValue = converter.toConnectData(topic, serializer.serialize(topic, struct));
     task.put(Collections.singleton(
-        new SinkRecord(topic, 1, null, null, SCHEMA, struct, 42)
+            new SinkRecord(topic, 1, null, null, schemaAndValue.schema(), schemaAndValue.value(), 42)
     ));
 
-    assertEquals(
+   assertEquals(
         1,
-        sqliteHelper.select(
+        postgresqlHelper.select(
             "SELECT * FROM " + topic,
-            new SqliteHelper.ResultSetReadCallback() {
+            new PostgresqlHelper.ResultSetReadCallback() {
               @Override
               public void read(ResultSet rs) throws SQLException {
-                assertEquals(topic, rs.getString("kafka_topic"));
-                assertEquals(1, rs.getInt("kafka_partition"));
-                assertEquals(42, rs.getLong("kafka_offset"));
-                assertEquals(struct.getString("firstName"), rs.getString("firstName"));
-                assertEquals(struct.getString("lastName"), rs.getString("lastName"));
-                assertEquals(struct.getBoolean("bool"), rs.getBoolean("bool"));
-                assertEquals(struct.getInt8("byte").byteValue(), rs.getByte("byte"));
-                assertEquals(struct.getInt16("short").shortValue(), rs.getShort("short"));
-                assertEquals(struct.getInt32("age").intValue(), rs.getInt("age"));
-                assertEquals(struct.getInt64("long").longValue(), rs.getLong("long"));
-                assertEquals(struct.getFloat32("float"), rs.getFloat("float"), 0.01);
-                assertEquals(struct.getFloat64("double"), rs.getDouble("double"), 0.01);
-                java.sql.Timestamp dbTimestamp = rs.getTimestamp(
-                    "modified",
-                    DateTimeUtils.getTimeZoneCalendar(timeZone)
-                );
-                assertEquals(((java.util.Date) struct.get("modified")).getTime(), dbTimestamp.getTime());
+                assertEquals(topic, rs.getString("connect_topic"));
+                assertEquals(1, rs.getInt("connect_partition"));
+                assertEquals(42, rs.getLong("connect_offset"));
+                JSONObject expectedJsonObject = new JSONObject(expected);
+                JSONObject resultJsonObject = new JSONObject(rs.getString("event"));
+                expectedJsonObject.keys().forEachRemaining(k -> assertEquals(resultJsonObject.get(k), expectedJsonObject.get(k)));
               }
             }
         )
@@ -139,68 +175,65 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
   }
 
   @Test
-  public void putPropagatesToDbWithPkModeRecordValue() throws Exception {
+  public void putPropagatesToDbWithAutoCreateAndKafkaCoordinatesTablePreExisting() throws Exception {
     Map<String, String> props = new HashMap<>();
-    props.put("connection.url", sqliteHelper.sqliteUri());
-    props.put("pk.mode", "record_value");
-    props.put("pk.fields", "firstName,lastName");
+    props.put("connection.url", postgresqlHelper.postgreSQL());
+    props.put("connection.user", "postgres");
+    props.put("connection.password", "password123");
 
+    Map<String, String> map = Stream.of(
+            new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "Person"),
+            new AbstractMap.SimpleImmutableEntry<>("Person.firstName", "firstname"),
+            new AbstractMap.SimpleImmutableEntry<>("Person.lastName", "lastname"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.PAYLOAD_FIELD_NAME, "event"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.INPUT_FORMAT, "avro")
+    )
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    converter.configure(map, false);
     JdbcSinkTask task = new JdbcSinkTask();
     task.initialize(mock(SinkTaskContext.class));
 
-    final String topic = "atopic";
-
-    sqliteHelper.createTable(
+    postgresqlHelper.createTable(
         "CREATE TABLE " + topic + "(" +
         "    firstName  TEXT," +
         "    lastName  TEXT," +
-        "    age INTEGER," +
-        "    bool  NUMERIC," +
-        "    byte  INTEGER," +
-        "    short INTEGER NULL," +
-        "    long INTEGER," +
-        "    float NUMERIC," +
-        "    double NUMERIC," +
-        "    bytes BLOB," +
-        "    modified DATETIME, "+
-        "PRIMARY KEY (firstName, lastName));"
+        "    event  JSONB);"
     );
 
     task.start(props);
 
-    final Struct struct = new Struct(SCHEMA)
-        .put("firstName", "Christina")
-        .put("lastName", "Brams")
-        .put("bool", false)
-        .put("byte", (byte) -72)
-        .put("long", 8594L)
-        .put("double", 3256677.56457d)
-        .put("age", 28)
-        .put("modified", new Date(1474661402123L));
+    GenericData.Record struct = new GenericRecordBuilder(avroSchema)
+        .set("firstName", "Christina")
+        .set("lastName", "Brams")
+        .set("bool", false)
+        .set("byte", -72)
+        .set("long", 8594L)
+        .set("double", 3256677.56457d)
+        .set("age", 28)
+        .set("modified", 1474661402123L)
+        .build();
 
-    task.put(Collections.singleton(new SinkRecord(topic, 1, null, null, SCHEMA, struct, 43)));
+    schemaRegistry.register(topic+ "-value", avroSchema);
+    String expected = struct.toString();
+
+    SchemaAndValue schemaAndValue = converter.toConnectData(topic, serializer.serialize(topic, struct));
+    System.out.println(schemaAndValue);
+    task.put(Collections.singleton(
+            new SinkRecord(topic, 1, null, null, schemaAndValue.schema(), schemaAndValue.value(), 43)
+    ));
 
     assertEquals(
         1,
-        sqliteHelper.select(
-            "SELECT * FROM " + topic + " WHERE firstName='" + struct.getString("firstName") + "' and lastName='" + struct.getString("lastName") + "'",
-            new SqliteHelper.ResultSetReadCallback() {
+        postgresqlHelper.select(
+            "SELECT * FROM " + topic + " WHERE firstName='" + struct.get("firstName") + "' and lastName='" + struct.get("lastName") + "'",
+            new PostgresqlHelper.ResultSetReadCallback() {
               @Override
               public void read(ResultSet rs) throws SQLException {
-                assertEquals(struct.getBoolean("bool"), rs.getBoolean("bool"));
-                rs.getShort("short");
-                assertTrue(rs.wasNull());
-                assertEquals(struct.getInt8("byte").byteValue(), rs.getByte("byte"));
-                assertEquals(struct.getInt32("age").intValue(), rs.getInt("age"));
-                assertEquals(struct.getInt64("long").longValue(), rs.getLong("long"));
-                rs.getShort("float");
-                assertTrue(rs.wasNull());
-                assertEquals(struct.getFloat64("double"), rs.getDouble("double"), 0.01);
-                java.sql.Timestamp dbTimestamp = rs.getTimestamp(
-                    "modified",
-                    DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC))
-                );
-                assertEquals(((java.util.Date) struct.get("modified")).getTime(), dbTimestamp.getTime());
+                JSONObject expectedJsonObject = new JSONObject(expected);
+                JSONObject resultJsonObject = new JSONObject(rs.getString("event"));
+                expectedJsonObject.keys().forEachRemaining(k -> assertEquals(resultJsonObject.get(k), expectedJsonObject.get(k)));
               }
             }
         )
@@ -212,9 +245,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     final int maxRetries = 2;
     final int retryBackoffMs = 1000;
 
-    Set<SinkRecord> records = Collections.singleton(new SinkRecord("stub", 0, null, null, null, null, 0));
-    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
-    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+    List<SinkRecord> records = createRecordsList(1);
 
     mockWriter.write(records);
     SQLException chainedException = new SQLException("cause 1");
@@ -235,14 +266,11 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
-
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
-    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
-    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
-    task.start(props);
-
+    expect(ctx.errantRecordReporter()).andReturn(null);
     replayAll();
+
+    Map<String, String> props = setupBasicProps(maxRetries, retryBackoffMs);
+    task.start(props);
 
     try {
       task.put(records);
@@ -291,4 +319,192 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     verifyAll();
   }
 
+  @Test
+  public void errorReporting() throws SQLException {
+    List<SinkRecord> records = createRecordsList(1);
+
+    mockWriter.write(records);
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
+    mockWriter.write(anyObject());
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.closeQuietly();
+    expectLastCall();
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    task.put(records);
+    verifyAll();
+  }
+
+  @Test
+  public void errorReportingTableAlterOrCreateException() throws SQLException {
+    List<SinkRecord> records = createRecordsList(1);
+
+    mockWriter.write(records);
+    TableAlterOrCreateException exception = new TableAlterOrCreateException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
+    mockWriter.write(anyObject());
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.closeQuietly();
+    expectLastCall();
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    task.put(records);
+    verifyAll();
+  }
+
+  @Test
+  public void batchErrorReporting() throws SQLException {
+    final int batchSize = 3;
+
+    List<SinkRecord> records = createRecordsList(batchSize);
+
+    mockWriter.write(records);
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
+    mockWriter.write(anyObject());
+    expectLastCall().andThrow(exception).times(batchSize);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null)).times(batchSize);
+    for (int i = 0; i < batchSize; i++) {
+      mockWriter.closeQuietly();
+      expectLastCall();
+    }
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    task.put(records);
+    verifyAll();
+  }
+
+  @Test
+  public void oneInBatchErrorReporting() throws SQLException {
+    final int batchSize = 3;
+
+    List<SinkRecord> records = createRecordsList(batchSize);
+
+    mockWriter.write(records);
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
+    mockWriter.write(anyObject());
+    expectLastCall().times(2);
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.closeQuietly();
+    expectLastCall();
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    task.put(records);
+    verifyAll();
+  }
+
+  @Test
+  public void oneInMiddleBatchErrorReporting() throws SQLException {
+    final int batchSize = 3;
+
+    List<SinkRecord> records = createRecordsList(batchSize);
+
+    mockWriter.write(records);
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
+    mockWriter.write(anyObject());
+    expectLastCall();
+    mockWriter.write(anyObject());
+    expectLastCall().andThrow(exception);
+    mockWriter.write(anyObject());
+    expectLastCall();
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.closeQuietly();
+    expectLastCall();
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    task.put(records);
+    verifyAll();
+  }
+
+  private List<SinkRecord> createRecordsList(int batchSize) {
+    List<SinkRecord> records = new ArrayList<>();
+    for (int i = 0; i < batchSize; i++) {
+      records.add(RECORD);
+    }
+    return records;
+  }
+
+  private Map<String, String> setupBasicProps(int maxRetries, long retryBackoffMs) {
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
+    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
+    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    return props;
+  }
 }

@@ -15,33 +15,15 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TimeZone;
-import java.util.stream.Collectors;
-
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
-
-import io.confluent.connect.jdbc.util.ConfigUtils;
-import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
-import io.confluent.connect.jdbc.util.DeleteEnabledRecommender;
-import io.confluent.connect.jdbc.util.EnumRecommender;
-import io.confluent.connect.jdbc.util.PrimaryKeyModeRecommender;
-import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.StringUtils;
-import io.confluent.connect.jdbc.util.TableType;
-import io.confluent.connect.jdbc.util.TimeZoneValidator;
+import io.confluent.connect.jdbc.util.*;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
+
+import java.time.ZoneId;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class JdbcSinkConfig extends AbstractConfig {
 
@@ -52,20 +34,26 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   }
 
-  public enum PrimaryKeyMode {
+  /*public enum PrimaryKeyMode {
     NONE,
     KAFKA,
     RECORD_KEY,
     RECORD_VALUE;
-  }
+  }*/
 
   public static final List<String> DEFAULT_KAFKA_PK_NAMES = Collections.unmodifiableList(
       Arrays.asList(
-          "__connect_topic",
-          "__connect_partition",
-          "__connect_offset"
+          "connect_topic",
+          "connect_partition",
+          "connect_offset"
       )
   );
+
+  public static final String COORDINATES_ENABLED = "coordinates.enabled";
+  private static final String COORDINATES_ENABLED_DEFAULT = "false";
+  private static final String COORDINATES_ENABLED_DOC =
+          "Whether to store records with they kafka coordinates: topic, partition, offset.";
+  private static final String COORDINATES_ENABLED_DISPLAY = "Enable kafka coordinates";
 
   public static final String CONNECTION_URL = JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG;
   private static final String CONNECTION_URL_DOC =
@@ -84,6 +72,24 @@ public class JdbcSinkConfig extends AbstractConfig {
       JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG;
   private static final String CONNECTION_PASSWORD_DOC = "JDBC connection password.";
   private static final String CONNECTION_PASSWORD_DISPLAY = "JDBC Password";
+
+  public static final String CONNECTION_ATTEMPTS =
+      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG;
+  private static final String CONNECTION_ATTEMPTS_DOC =
+      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DOC;
+  private static final String CONNECTION_ATTEMPTS_DISPLAY =
+      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DISPLAY;
+  public static final int CONNECTION_ATTEMPTS_DEFAULT =
+      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DEFAULT;
+
+  public static final String CONNECTION_BACKOFF =
+      JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG;
+  private static final String CONNECTION_BACKOFF_DOC =
+      JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DOC;
+  private static final String CONNECTION_BACKOFF_DISPLAY =
+      JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DISPLAY;
+  public static final long CONNECTION_BACKOFF_DEFAULT =
+      JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT;
 
   public static final String TABLE_NAME_FORMAT = "table.name.format";
   private static final String TABLE_NAME_FORMAT_DEFAULT = "${topic}";
@@ -148,25 +154,24 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "the connector, e.g. ``UPDATE``.";
   private static final String INSERT_MODE_DISPLAY = "Insert Mode";
 
-  public static final String PK_FIELDS = "pk.fields";
-  private static final String PK_FIELDS_DEFAULT = "";
-  private static final String PK_FIELDS_DOC =
-      "List of comma-separated primary key field names. The runtime interpretation of this config"
-      + " depends on the ``pk.mode``:\n"
-      + "``none``\n"
-      + "    Ignored as no fields are used as primary key in this mode.\n"
-      + "``kafka``\n"
-      + "    Must be a trio representing the Kafka coordinates, defaults to ``"
-      + StringUtils.join(DEFAULT_KAFKA_PK_NAMES, ",") + "`` if empty.\n"
-      + "``record_key``\n"
-      + "    If empty, all fields from the key struct will be used, otherwise used to extract the"
-      + " desired fields - for primitive key only a single field name must be configured.\n"
-      + "``record_value``\n"
-      + "    If empty, all fields from the value struct will be used, otherwise used to extract "
-      + "the desired fields.";
-  private static final String PK_FIELDS_DISPLAY = "Primary Key Fields";
+  public static final String UPSERT_KEYS = "upsert.keys";
+  private static final String UPSERT_KEYS_DEFAULT = "";
+  private static final String UPSERT_KEYS_DOC =
+      "List of comma-separated key field names that are used to upsert or update matching rows.\n"
+      + "Upsert will be used to write events idempotent to the target to prevent duplicates. \n"
+      + "Upsert is executed as a DELETE followed by INSERT filtered on these key(s). \n"
+      + "Assure these keys guarantee an individual record with for example an event id." ;
+  private static final String UPSERT_KEYS_DISPLAY = "Keys used for upsert";
 
-  public static final String PK_MODE = "pk.mode";
+  public static final String DELETE_KEYS = "delete.keys";
+  private static final String DELETE_KEYS_DEFAULT = "";
+  private static final String DELETE_KEYS_DOC =
+          "Key field names from Kafka Record Key that is used to delete matching rows.\n"
+                  + "Delete can be used to delete a series of events that match the value(s) of the Kafka Record Key \n"
+                  + "received in a tombstone record.";
+  private static final String DELETE_KEYS_DISPLAY = "Keys used for delete";
+
+ /* public static final String PK_MODE = "pk.mode";
   private static final String PK_MODE_DEFAULT = "none";
   private static final String PK_MODE_DOC =
       "The primary key mode, also refer to ``" + PK_FIELDS + "`` documentation for interplay. "
@@ -179,9 +184,9 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "    Field(s) from the record key are used, which may be a primitive or a struct.\n"
       + "``record_value``\n"
       + "    Field(s) from the record value are used, which must be a struct.";
-  private static final String PK_MODE_DISPLAY = "Primary Key Mode";
+  private static final String PK_MODE_DISPLAY = "Primary Key Mode";*/
 
-  public static final String FIELDS_WHITELIST = "fields.whitelist";
+/*  public static final String FIELDS_WHITELIST = "fields.whitelist";
   private static final String FIELDS_WHITELIST_DEFAULT = "";
   private static final String FIELDS_WHITELIST_DOC =
       "List of comma-separated record value field names. If empty, all fields from the record "
@@ -189,7 +194,7 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "Note that ``" + PK_FIELDS + "`` is applied independently in the context of which field"
       + "(s) form the primary key columns in the destination database,"
       + " while this configuration is applicable for the other columns.";
-  private static final String FIELDS_WHITELIST_DISPLAY = "Fields Whitelist";
+  private static final String FIELDS_WHITELIST_DISPLAY = "Fields Whitelist";*/
 
   private static final ConfigDef.Range NON_NEGATIVE_INT_VALIDATOR = ConfigDef.Range.atLeast(0);
 
@@ -235,6 +240,45 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "support writing to views, and when they do the the sink connector will fail if the "
       + "view definition does not match the records' schemas (regardless of ``"
       + AUTO_EVOLVE + "``).";
+
+  public static final String PAYLOAD_FIELD_NAME = "value.converter.payload.field.name";
+  private static final String PAYLOAD_FIELD_NAME_DEFAULT = "event";
+  private static final String PAYLOAD_FIELD_NAME_DOC =
+          "Specify the field name that will be used to contain the record value in JSON ";
+
+  public static final String SCHEMA_NAMES = "value.converter.schema.names";
+  private static final String SCHEMA_NAMES_DOC =
+          "Specify the field name that will be used to contain the record value in JSON ";
+
+  public static final String ZONEMAPATTRIBUTES = "zonemapattributes";
+  private static final String ZONEMAPATTRIBUTES_DEFAULT = "";
+  private static final String ZONEMAPATTRIBUTES_DOC =
+          "List of comma-separated column names that need to be included in a zonemap for create table";
+  private static final String ZONEMAPATTRIBUTES_DISPLAY = "Zonemap column names";
+
+  public static final String CLUSTEREDATTRIBUTES = "clusteredattributes";
+  private static final String CLUSTEREDATTRIBUTES_DEFAULT = "";
+  private static final String CLUSTEREDATTRIBUTES_DOC =
+          "List of comma-separated column names that need to be stored clustered for create table";
+  private static final String CLUSTEREDATTRIBUTES_DISPLAY = "Cluster column names";
+
+  public static final String DISTRIBUTIONATTRIBUTES = "distributionattributes";
+  private static final String DISTRIBUTIONATTRIBUTES_DEFAULT = "";
+  private static final String DISTRIBUTIONATTRIBUTES_DOC =
+          "List of comma-separated column names that need to be used as distribution columns for create table";
+  private static final String DISTRIBUTIONATTRIBUTES_DISPLAY = "Distribution column names";
+
+  public static final String PARTITIONS = "partitions";
+  private static final int PARTITIONS_DEFAULT = 10;
+  private static final String PARTITIONS_DOC =
+          "The number of partitions to distribute the table data on.";
+  private static final String PARTITIONS_DISPLAY = "Number of partitions";
+
+  public static final String VALUE_CONVERTER_NAME = "value.converter";
+  private static final String VALUE_CONVERTER_DOC =
+          "Specify the class name of the value converter ";
+  private static final String VALUE_CONVERTER_DEFAULT = "no.norsktipping.kafka.connect.converter.JsonConverter";
+  private static final String VALUE_CONVERTER_DISPLAY = "Value converter class";
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
@@ -290,6 +334,28 @@ public class JdbcSinkConfig extends AbstractConfig {
             DIALECT_NAME_DISPLAY,
             DatabaseDialectRecommender.INSTANCE
         )
+        .define(
+            CONNECTION_ATTEMPTS,
+            ConfigDef.Type.INT,
+            CONNECTION_ATTEMPTS_DEFAULT,
+            ConfigDef.Range.atLeast(1),
+            ConfigDef.Importance.LOW,
+            CONNECTION_ATTEMPTS_DOC,
+            CONNECTION_GROUP,
+            5,
+            ConfigDef.Width.SHORT,
+            CONNECTION_ATTEMPTS_DISPLAY
+        ).define(
+            CONNECTION_BACKOFF,
+            ConfigDef.Type.LONG,
+            CONNECTION_BACKOFF_DEFAULT,
+            ConfigDef.Importance.LOW,
+            CONNECTION_BACKOFF_DOC,
+            CONNECTION_GROUP,
+            6,
+            ConfigDef.Width.SHORT,
+            CONNECTION_BACKOFF_DISPLAY
+        )
         // Writes
         .define(
             INSERT_MODE,
@@ -322,8 +388,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             DELETE_ENABLED_DOC, WRITES_GROUP,
             3,
             ConfigDef.Width.SHORT,
-            DELETE_ENABLED_DISPLAY,
-            DeleteEnabledRecommender.INSTANCE
+            DELETE_ENABLED_DISPLAY
         )
         .define(
             TABLE_TYPES_CONFIG,
@@ -349,7 +414,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.LONG,
             TABLE_NAME_FORMAT_DISPLAY
         )
-        .define(
+        /*.define(
             PK_MODE,
             ConfigDef.Type.STRING,
             PK_MODE_DEFAULT,
@@ -361,18 +426,39 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.MEDIUM,
             PK_MODE_DISPLAY,
             PrimaryKeyModeRecommender.INSTANCE
+        )*/
+        .define(
+            COORDINATES_ENABLED,
+            ConfigDef.Type.BOOLEAN,
+            COORDINATES_ENABLED_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            COORDINATES_ENABLED_DOC, DATAMAPPING_GROUP,
+            2,
+            ConfigDef.Width.SHORT,
+            COORDINATES_ENABLED_DISPLAY
         )
         .define(
-            PK_FIELDS,
+            UPSERT_KEYS,
             ConfigDef.Type.LIST,
-            PK_FIELDS_DEFAULT,
+            UPSERT_KEYS_DEFAULT,
             ConfigDef.Importance.MEDIUM,
-            PK_FIELDS_DOC,
+            UPSERT_KEYS_DOC,
             DATAMAPPING_GROUP,
             3,
-            ConfigDef.Width.LONG, PK_FIELDS_DISPLAY
+            ConfigDef.Width.LONG, UPSERT_KEYS_DISPLAY
         )
-        .define(
+          .define(
+            DELETE_KEYS,
+            ConfigDef.Type.LIST,
+            DELETE_KEYS_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            DELETE_KEYS_DOC,
+            DATAMAPPING_GROUP,
+            4,
+            ConfigDef.Width.MEDIUM,
+            DELETE_KEYS_DISPLAY
+          )
+        /*.define(
             FIELDS_WHITELIST,
             ConfigDef.Type.LIST,
             FIELDS_WHITELIST_DEFAULT,
@@ -382,7 +468,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             4,
             ConfigDef.Width.LONG,
             FIELDS_WHITELIST_DISPLAY
-        ).define(
+        )*/.define(
           DB_TIMEZONE_CONFIG,
           ConfigDef.Type.STRING,
           DB_TIMEZONE_DEFAULT,
@@ -450,26 +536,108 @@ public class JdbcSinkConfig extends AbstractConfig {
             2,
             ConfigDef.Width.SHORT,
             RETRY_BACKOFF_MS_DISPLAY
-        );
+        ).define(
+          PAYLOAD_FIELD_NAME,
+          ConfigDef.Type.STRING,
+          PAYLOAD_FIELD_NAME_DEFAULT,
+          ConfigDef.Importance.HIGH,
+          PAYLOAD_FIELD_NAME_DOC
+          ).define(
+          ZONEMAPATTRIBUTES,
+          ConfigDef.Type.LIST,
+          ZONEMAPATTRIBUTES_DEFAULT,
+          ConfigDef.Importance.MEDIUM,
+          ZONEMAPATTRIBUTES_DOC,
+          WRITES_GROUP,
+            6,
+          ConfigDef.Width.LONG,
+          ZONEMAPATTRIBUTES_DISPLAY
+          ).define(
+          CLUSTEREDATTRIBUTES,
+          ConfigDef.Type.LIST,
+          CLUSTEREDATTRIBUTES_DEFAULT,
+          ConfigDef.Importance.MEDIUM,
+          CLUSTEREDATTRIBUTES_DOC,
+          WRITES_GROUP,
+          7,
+          ConfigDef.Width.LONG,
+          CLUSTEREDATTRIBUTES_DISPLAY
+          ).define(
+          DISTRIBUTIONATTRIBUTES,
+          ConfigDef.Type.LIST,
+          DISTRIBUTIONATTRIBUTES_DEFAULT,
+          ConfigDef.Importance.MEDIUM,
+          DISTRIBUTIONATTRIBUTES_DOC,
+          WRITES_GROUP,
+          8,
+          ConfigDef.Width.LONG,
+          DISTRIBUTIONATTRIBUTES_DISPLAY
+          ).define(
+          PARTITIONS,
+          ConfigDef.Type.INT,
+          PARTITIONS_DEFAULT,
+          NON_NEGATIVE_INT_VALIDATOR,
+          ConfigDef.Importance.LOW,
+          PARTITIONS_DOC,
+          WRITES_GROUP,
+            9,
+          ConfigDef.Width.SHORT,
+          PARTITIONS_DISPLAY
+          ).define(
+            VALUE_CONVERTER_NAME,
+            ConfigDef.Type.STRING,
+            "no.norsktipping.kafka.connect.converter.JsonConverter",
+            new ConfigDef.Validator() {
+              @Override
+              public void ensureValid(String key, Object value) {
+                if (!value.equals("no.norsktipping.kafka.connect.converter.JsonConverter")) {
+                  throw new ConfigException(key, value, "Invalid value converter");
+                }
+              }
+            },
+            ConfigDef.Importance.HIGH,
+            VALUE_CONVERTER_DOC,
+            WRITES_GROUP,
+            10,
+            ConfigDef.Width.SHORT,
+            VALUE_CONVERTER_DISPLAY
+          ).define(
+            SCHEMA_NAMES,
+            ConfigDef.Type.LIST,
+            new ArrayList<>(),
+            ConfigDef.Importance.HIGH,
+            SCHEMA_NAMES_DOC)
+          ;
 
   public final String connectorName;
   public final String connectionUrl;
   public final String connectionUser;
   public final String connectionPassword;
+  public final int connectionAttempts;
+  public final long connectionBackoffMs;
   public final String tableNameFormat;
   public final int batchSize;
   public final boolean deleteEnabled;
+  public final boolean coordinatesEnabled;
   public final int maxRetries;
   public final int retryBackoffMs;
   public final boolean autoCreate;
   public final boolean autoEvolve;
   public final InsertMode insertMode;
-  public final PrimaryKeyMode pkMode;
-  public final List<String> pkFields;
-  public final Set<String> fieldsWhitelist;
+//  public final PrimaryKeyMode pkMode;
+  public final Set<String> upsertKeys;
+  public final Set<String> deleteKeys;
+
+  //public final Set<String> fieldsWhitelist;
   public final String dialectName;
   public final TimeZone timeZone;
   public final EnumSet<TableType> tableTypes;
+  public final String payloadFieldName;
+  public final List<String> schemaNames;
+  public final List<String> clusteredattributes;
+  public final List<String> distributionattributes;
+  public final List<String> zonemapattributes;
+  public final int partitions;
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
@@ -477,26 +645,53 @@ public class JdbcSinkConfig extends AbstractConfig {
     connectionUrl = getString(CONNECTION_URL);
     connectionUser = getString(CONNECTION_USER);
     connectionPassword = getPasswordValue(CONNECTION_PASSWORD);
+    connectionAttempts = getInt(CONNECTION_ATTEMPTS);
+    connectionBackoffMs = getLong(CONNECTION_BACKOFF);
     tableNameFormat = getString(TABLE_NAME_FORMAT).trim();
     batchSize = getInt(BATCH_SIZE);
     deleteEnabled = getBoolean(DELETE_ENABLED);
+    coordinatesEnabled = getBoolean(COORDINATES_ENABLED);
     maxRetries = getInt(MAX_RETRIES);
     retryBackoffMs = getInt(RETRY_BACKOFF_MS);
     autoCreate = getBoolean(AUTO_CREATE);
     autoEvolve = getBoolean(AUTO_EVOLVE);
     insertMode = InsertMode.valueOf(getString(INSERT_MODE).toUpperCase());
-    pkMode = PrimaryKeyMode.valueOf(getString(PK_MODE).toUpperCase());
-    pkFields = getList(PK_FIELDS);
+    //pkMode = PrimaryKeyMode.valueOf(getString(PK_MODE).toUpperCase());
+    upsertKeys = new HashSet<>(getList(UPSERT_KEYS));
+    deleteKeys = new HashSet<>(getList(DELETE_KEYS));
     dialectName = getString(DIALECT_NAME_CONFIG);
-    fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
+//    fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+    payloadFieldName = getString(PAYLOAD_FIELD_NAME).trim();
+    schemaNames = getList(SCHEMA_NAMES);
+    clusteredattributes = getList(CLUSTEREDATTRIBUTES);
+    distributionattributes = getList(DISTRIBUTIONATTRIBUTES);
+    zonemapattributes = getList(ZONEMAPATTRIBUTES);
+    partitions = getInt(PARTITIONS);
 
-    if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {
-      throw new ConfigException(
-          "Primary key mode must be 'record_key' when delete support is enabled");
+    Map<String, ArrayList<Object>> schemaValues = schemaNames.stream().map(schemaName ->
+            new AbstractMap.SimpleEntry<>(
+                    schemaName,
+                    new ArrayList<>(this.originalsWithPrefix("value.converter." + schemaName + ".")
+                            .values())))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    if (insertMode == InsertMode.UPSERT || insertMode == InsertMode.UPDATE) {
+      if (upsertKeys.isEmpty() || !schemaValues.values().stream().allMatch(values -> values.containsAll(upsertKeys))) {
+        throw new ConfigException(
+        String.format("All %s configured in %s must be configured with a subset of keys configured as <newname> in value converter configuration i.e. %s when %s is %s or %s",
+                upsertKeys, UPSERT_KEYS, "value.converer.<schemaname>.<oldname>,<newname>", INSERT_MODE, InsertMode.UPSERT, InsertMode.UPDATE));
+      }
+    }
+    if (deleteEnabled) {
+      if (deleteKeys.isEmpty() || !schemaValues.values().stream().allMatch(values -> values.containsAll(deleteKeys))) {
+        throw new ConfigException(
+                String.format("Delete keys configured in %s must be configured with a matching key configured as <newname> in value converter configuration i.e. %s when %s is %s",
+                        DELETE_KEYS, "value.converer.<schemaname>.<oldname>,<newname>", DELETE_ENABLED, "true"));
+      }
     }
     tableTypes = TableType.parse(getList(TABLE_TYPES_CONFIG));
+
   }
 
   private String getPasswordValue(String key) {

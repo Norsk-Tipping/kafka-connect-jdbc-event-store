@@ -15,10 +15,14 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import org.apache.kafka.common.config.ConfigException;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.dialect.PostgreSqlDatabaseDialect;
+import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.TableDefinition;
-import java.sql.Types;
+import io.confluent.connect.jdbc.util.TableId;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -31,77 +35,63 @@ import org.mockito.Matchers;
 import org.mockito.Mockito;
 
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.sql.*;
+import java.util.*;
 
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.dialect.DatabaseDialects;
-import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
-import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
-import io.confluent.connect.jdbc.util.TableId;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class BufferedRecordsTest {
 
-  private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
+  private final PostgresqlHelper postgresqlHelper = new PostgresqlHelper(getClass().getSimpleName());
 
   private Map<Object, Object> props;
 
   @Before
   public void setUp() throws IOException, SQLException {
-    sqliteHelper.setUp();
+    postgresqlHelper.setUp();
     props = new HashMap<>();
     props.put("name", "my-connector");
-    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("connection.url", postgresqlHelper.postgreSQL());
     props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
     // We don't manually create the table, so let the connector do it
     props.put("auto.create", true);
     // We use various schemas, so let the connector add missing columns
     props.put("auto.evolve", true);
+    props.put("input.format", "json");
   }
 
   @After
   public void tearDown() throws IOException, SQLException {
-    sqliteHelper.tearDown();
+    postgresqlHelper.tearDown();
   }
 
   @Test
   public void correctBatching() throws SQLException {
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-    final String url = sqliteHelper.sqliteUri();
+    final String url = postgresqlHelper.postgreSQL();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, postgresqlHelper.connection);
 
     final Schema schemaA = SchemaBuilder.struct()
-        .field("name", Schema.STRING_SCHEMA)
+        .field("event", Schema.STRING_SCHEMA)
         .build();
     final Struct valueA = new Struct(schemaA)
-        .put("name", "cuba");
+        .put("event", "{\"key\":\"cuba\"}");
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
 
     final Schema schemaB = SchemaBuilder.struct()
-        .field("name", Schema.STRING_SCHEMA)
+        .field("event", Schema.STRING_SCHEMA)
         .field("age", Schema.OPTIONAL_INT32_SCHEMA)
         .build();
     final Struct valueB = new Struct(schemaB)
-        .put("name", "cuba")
+        .put("event", "{\"key\":\"cuba\"}")
         .put("age", 4);
     final SinkRecord recordB = new SinkRecord("dummy", 1, null, null, schemaB, valueB, 1);
 
@@ -119,48 +109,43 @@ public class BufferedRecordsTest {
     assertEquals(Collections.singletonList(recordA), buffer.flush());
   }
 
-  @Test(expected = ConfigException.class)
-  public void configParsingFailsIfDeleteWithWrongPKMode() {
-    props.put("delete.enabled", true);
-    props.put("insert.mode", "upsert");
-    props.put("pk.mode", "kafka"); // wrong pk mode for deletes
-    new JdbcSinkConfig(props);
-  }
-
   @Test
   public void insertThenDeleteInBatchNoFlush() throws SQLException {
     props.put("delete.enabled", true);
-    props.put("insert.mode", "upsert");
-    props.put("pk.mode", "record_key");
+    props.put("insert.mode", "insert");
+    props.put("delete.keys", "id");
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-    final String url = sqliteHelper.sqliteUri();
+    final String url = postgresqlHelper.postgreSQL();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, postgresqlHelper.connection);
 
     final Schema keySchemaA = SchemaBuilder.struct()
-        .field("id", Schema.INT64_SCHEMA)
+        .field("id", Schema.STRING_SCHEMA)
         .build();
     final Schema valueSchemaA = SchemaBuilder.struct()
-        .field("name", Schema.STRING_SCHEMA)
+        .field("event", Schema.STRING_SCHEMA)
+        .field("id", Schema.STRING_SCHEMA)
         .build();
     final Struct keyA = new Struct(keySchemaA)
-        .put("id", 1234L);
+        .put("id", "1234L");
     final Struct valueA = new Struct(valueSchemaA)
-        .put("name", "cuba");
+        .put("id", "1234L")
+        .put("event", "{\"key\":\"cuba\"}");
+
     final SinkRecord recordA = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, valueA, 0);
     final SinkRecord recordADelete = new SinkRecord("dummy", 0, keySchemaA, keyA, null, null, 0);
 
     final Schema schemaB = SchemaBuilder.struct()
-        .field("name", Schema.STRING_SCHEMA)
-        .field("age", Schema.OPTIONAL_INT32_SCHEMA)
+        .field("event", Schema.STRING_SCHEMA)
+        .field("id", Schema.STRING_SCHEMA)
         .build();
     final Struct valueB = new Struct(schemaB)
-        .put("name", "cuba")
-        .put("age", 4);
+        .put("event", "{\"key\":\"cuba2\"}")
+        .put("id", "1234L");
     final SinkRecord recordB = new SinkRecord("dummy", 1, keySchemaA, keyA, schemaB, valueB, 1);
 
     // test records are batched correctly based on schema equality as records are added
@@ -175,46 +160,49 @@ public class BufferedRecordsTest {
     // schema change should trigger flush
     assertEquals(Arrays.asList(recordA, recordA, recordADelete), buffer.add(recordB));
 
-    // second schema change should trigger flush
-    assertEquals(Collections.singletonList(recordB), buffer.add(recordA));
+    assertEquals(Collections.emptyList(), buffer.add(recordA));
 
-    assertEquals(Collections.singletonList(recordA), buffer.flush());
+    assertEquals(Arrays.asList(recordB, recordA), buffer.flush());
   }
 
   @Test
   public void insertThenTwoDeletesWithSchemaInBatchNoFlush() throws SQLException {
 	    props.put("delete.enabled", true);
-	    props.put("insert.mode", "upsert");
-	    props.put("pk.mode", "record_key");
+	    props.put("insert.mode", "insert");
+	    props.put("delete.keys", "id");
 	    final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-	    final String url = sqliteHelper.sqliteUri();
+	    final String url = postgresqlHelper.postgreSQL();
 	    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
 	    final DbStructure dbStructure = new DbStructure(dbDialect);
 
 	    final TableId tableId = new TableId(null, null, "dummy");
-	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, postgresqlHelper.connection);
 
 	    final Schema keySchemaA = SchemaBuilder.struct()
-	        .field("id", Schema.INT64_SCHEMA)
+            .field("id", Schema.STRING_SCHEMA)
 	        .build();
 	    final Schema valueSchemaA = SchemaBuilder.struct()
-	        .field("name", Schema.STRING_SCHEMA)
+            .field("id", Schema.STRING_SCHEMA)
+	        .field("event", Schema.STRING_SCHEMA)
 	        .build();
 	    final Struct keyA = new Struct(keySchemaA)
-	        .put("id", 1234L);
+	        .put("id", "1234L");
 	    final Struct valueA = new Struct(valueSchemaA)
-	        .put("name", "cuba");
+            .put("id", "1234L")
+	        .put("event", "{\"key\":\"cuba\"}");
 	    final SinkRecord recordA = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, valueA, 0);
 	    final SinkRecord recordADeleteWithSchema = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, null, 0);
 	    final SinkRecord recordADelete = new SinkRecord("dummy", 0, keySchemaA, keyA, null, null, 0);
 
 	    final Schema schemaB = SchemaBuilder.struct()
-	        .field("name", Schema.STRING_SCHEMA)
+	        .field("event", Schema.STRING_SCHEMA)
 	        .field("age", Schema.OPTIONAL_INT32_SCHEMA)
+            .field("id", Schema.STRING_SCHEMA)
 	        .build();
 	    final Struct valueB = new Struct(schemaB)
-	        .put("name", "cuba")
+            .put("id", "1234L")
+	        .put("event", "{\"key\":\"cuba\"}")
 	        .put("age", 4);
 	    final SinkRecord recordB = new SinkRecord("dummy", 1, keySchemaA, keyA, schemaB, valueB, 1);
 
@@ -242,36 +230,40 @@ public class BufferedRecordsTest {
   @Test
   public void insertThenDeleteThenInsertInBatchFlush() throws SQLException {
     props.put("delete.enabled", true);
-    props.put("insert.mode", "upsert");
-    props.put("pk.mode", "record_key");
+    props.put("insert.mode", "insert");
+    props.put("delete.keys", "id");
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-    final String url = sqliteHelper.sqliteUri();
+    final String url = postgresqlHelper.postgreSQL();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, postgresqlHelper.connection);
 
     final Schema keySchemaA = SchemaBuilder.struct()
-        .field("id", Schema.INT64_SCHEMA)
+        .field("id", Schema.STRING_SCHEMA)
         .build();
     final Schema valueSchemaA = SchemaBuilder.struct()
-        .field("name", Schema.STRING_SCHEMA)
+        .field("id", Schema.STRING_SCHEMA)
+        .field("event", Schema.STRING_SCHEMA)
         .build();
     final Struct keyA = new Struct(keySchemaA)
-        .put("id", 1234L);
+        .put("id", "1234L");
     final Struct valueA = new Struct(valueSchemaA)
-        .put("name", "cuba");
+        .put("id", "1234L")
+        .put("event", "{\"key:\": \"cuba\"}");
     final SinkRecord recordA = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, valueA, 0);
     final SinkRecord recordADelete = new SinkRecord("dummy", 0, keySchemaA, keyA, null, null, 0);
 
     final Schema schemaB = SchemaBuilder.struct()
-        .field("name", Schema.STRING_SCHEMA)
+        .field("id", Schema.STRING_SCHEMA)
+        .field("event", Schema.STRING_SCHEMA)
         .field("age", Schema.OPTIONAL_INT32_SCHEMA)
         .build();
     final Struct valueB = new Struct(schemaB)
-        .put("name", "cuba")
+        .put("id", "1234L")
+        .put("event", "{\"key\":\"cuba\"}")
         .put("age", 4);
     final SinkRecord recordB = new SinkRecord("dummy", 1, keySchemaA, keyA, schemaB, valueB, 1);
 
@@ -297,35 +289,40 @@ public class BufferedRecordsTest {
   public void insertThenDeleteWithSchemaThenInsertInBatchFlush() throws SQLException {
 	    props.put("delete.enabled", true);
 	    props.put("insert.mode", "upsert");
-	    props.put("pk.mode", "record_key");
+        props.put("delete.keys", "id");
+        props.put("upsert.keys", "id");
 	    final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-	    final String url = sqliteHelper.sqliteUri();
+	    final String url = postgresqlHelper.postgreSQL();
 	    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
 	    final DbStructure dbStructure = new DbStructure(dbDialect);
 
 	    final TableId tableId = new TableId(null, null, "dummy");
-	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, postgresqlHelper.connection);
 
 	    final Schema keySchemaA = SchemaBuilder.struct()
-	        .field("id", Schema.INT64_SCHEMA)
+            .field("id", Schema.STRING_SCHEMA)
 	        .build();
 	    final Schema valueSchemaA = SchemaBuilder.struct()
-	        .field("name", Schema.STRING_SCHEMA)
+            .field("id", Schema.STRING_SCHEMA)
+	        .field("event", Schema.STRING_SCHEMA)
 	        .build();
 	    final Struct keyA = new Struct(keySchemaA)
-	        .put("id", 1234L);
+	        .put("id", "1234L");
 	    final Struct valueA = new Struct(valueSchemaA)
-	        .put("name", "cuba");
+            .put("id", "1234L")
+	        .put("event", "{\"key\":\"cuba\"}");
 	    final SinkRecord recordA = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, valueA, 0);
 	    final SinkRecord recordADeleteWithSchema = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, null, 0);
 
 	    final Schema schemaB = SchemaBuilder.struct()
-	        .field("name", Schema.STRING_SCHEMA)
+            .field("id", Schema.STRING_SCHEMA)
+	        .field("event", Schema.STRING_SCHEMA)
 	        .field("age", Schema.OPTIONAL_INT32_SCHEMA)
 	        .build();
 	    final Struct valueB = new Struct(schemaB)
-	        .put("name", "cuba")
+            .put("id", "1234L")
+	        .put("event", "{\"key\":\"cuba\"}")
 	        .put("age", 4);
 	    final SinkRecord recordB = new SinkRecord("dummy", 1, keySchemaA, keyA, schemaB, valueB, 1);
 
@@ -351,35 +348,40 @@ public class BufferedRecordsTest {
   public void testMultipleDeletesBatchedTogether() throws SQLException {
     props.put("delete.enabled", true);
     props.put("insert.mode", "upsert");
-    props.put("pk.mode", "record_key");
+    props.put("delete.keys", "id");
+    props.put("upsert.keys", "id");
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-    final String url = sqliteHelper.sqliteUri();
+    final String url = postgresqlHelper.postgreSQL();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, postgresqlHelper.connection);
 
     final Schema keySchemaA = SchemaBuilder.struct()
-        .field("id", Schema.INT64_SCHEMA)
+        .field("id", Schema.STRING_SCHEMA)
         .build();
     final Schema valueSchemaA = SchemaBuilder.struct()
-        .field("name", Schema.STRING_SCHEMA)
+        .field("id", Schema.STRING_SCHEMA)
+        .field("event", Schema.STRING_SCHEMA)
         .build();
     final Struct keyA = new Struct(keySchemaA)
-        .put("id", 1234L);
+        .put("id", "1234L");
     final Struct valueA = new Struct(valueSchemaA)
-        .put("name", "cuba");
+        .put("id", "1234L")
+        .put("event", "{\"key\":\"cuba\"}");
     final SinkRecord recordA = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, valueA, 0);
     final SinkRecord recordADelete = new SinkRecord("dummy", 0, keySchemaA, keyA, null, null, 0);
 
     final Schema schemaB = SchemaBuilder.struct()
-        .field("name", Schema.STRING_SCHEMA)
+        .field("id", Schema.STRING_SCHEMA)
+        .field("event", Schema.STRING_SCHEMA)
         .field("age", Schema.OPTIONAL_INT32_SCHEMA)
         .build();
     final Struct valueB = new Struct(schemaB)
-        .put("name", "cuba")
+        .put("id", "1234L")
+        .put("event", "{\"key\":\"cuba\"}")
         .put("age", 4);
     final SinkRecord recordB = new SinkRecord("dummy", 1, keySchemaA, keyA, schemaB, valueB, 1);
     final SinkRecord recordBDelete = new SinkRecord("dummy", 1, keySchemaA, keyA, null, null, 1);
@@ -402,36 +404,41 @@ public class BufferedRecordsTest {
   @Test
   public void testMultipleDeletesWithSchemaBatchedTogether() throws SQLException {
 	    props.put("delete.enabled", true);
-	    props.put("insert.mode", "upsert");
-	    props.put("pk.mode", "record_key");
+	    props.put("insert.mode", "insert");
+        props.put("delete.keys", "id");
+        props.put("upsert.keys", "id");
 	    final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-	    final String url = sqliteHelper.sqliteUri();
+	    final String url = postgresqlHelper.postgreSQL();
 	    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
 	    final DbStructure dbStructure = new DbStructure(dbDialect);
 
 	    final TableId tableId = new TableId(null, null, "dummy");
-	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, postgresqlHelper.connection);
 
 	    final Schema keySchemaA = SchemaBuilder.struct()
-	        .field("id", Schema.INT64_SCHEMA)
+            .field("id", Schema.STRING_SCHEMA)
 	        .build();
 	    final Schema valueSchemaA = SchemaBuilder.struct()
-	        .field("name", Schema.STRING_SCHEMA)
+            .field("id", Schema.STRING_SCHEMA)
+	        .field("event", Schema.STRING_SCHEMA)
 	        .build();
 	    final Struct keyA = new Struct(keySchemaA)
-	        .put("id", 1234L);
+	        .put("id", "1234L");
 	    final Struct valueA = new Struct(valueSchemaA)
-	        .put("name", "cuba");
+            .put("id", "1234L")
+	        .put("event", "{\"key\":\"cuba\"}");
 	    final SinkRecord recordA = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, valueA, 0);
 	    final SinkRecord recordADeleteWithSchema = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, null, 0);
 
 	    final Schema schemaB = SchemaBuilder.struct()
-	        .field("name", Schema.STRING_SCHEMA)
+            .field("id", Schema.STRING_SCHEMA)
+	        .field("event", Schema.STRING_SCHEMA)
 	        .field("age", Schema.OPTIONAL_INT32_SCHEMA)
 	        .build();
 	    final Struct valueB = new Struct(schemaB)
-	        .put("name", "cuba")
+            .put("id", "1234L")
+	        .put("event", "{\"key\":\"cuba\"}")
 	        .put("age", 4);
 	    final SinkRecord recordB = new SinkRecord("dummy", 1, keySchemaA, keyA, schemaB, valueB, 1);
 	    final SinkRecord recordBDeleteWithSchema = new SinkRecord("dummy", 1, keySchemaA, keyA, schemaB, null, 1);
@@ -455,7 +462,7 @@ public class BufferedRecordsTest {
   
   @Test
   public void testFlushSuccessNoInfo() throws SQLException {
-    final String url = sqliteHelper.sqliteUri();
+    final String url = postgresqlHelper.postgreSQL();
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
@@ -467,7 +474,7 @@ public class BufferedRecordsTest {
     final ColumnDefinition colDefMock = mock(ColumnDefinition.class);
     when(colDefMock.type()).thenReturn(Types.VARCHAR);
     final TableDefinition tabDefMock = mock(TableDefinition.class);
-    when(tabDefMock.definitionForColumn("name")).thenReturn(colDefMock);
+    when(tabDefMock.definitionForColumn("event")).thenReturn(colDefMock);
 
 
     final DbStructure dbStructureMock = mock(DbStructure.class);
@@ -488,13 +495,13 @@ public class BufferedRecordsTest {
     final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect,
                                                        dbStructureMock, connectionMock);
 
-    final Schema schemaA = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
-    final Struct valueA = new Struct(schemaA).put("name", "cuba");
+    final Schema schemaA = SchemaBuilder.struct().field("event", Schema.STRING_SCHEMA).build();
+    final Struct valueA = new Struct(schemaA).put("event", "{\"key\":\"cuba\"}");
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
     buffer.add(recordA);
 
-    final Schema schemaB = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
-    final Struct valueB = new Struct(schemaA).put("name", "cubb");
+    final Schema schemaB = SchemaBuilder.struct().field("event", Schema.STRING_SCHEMA).build();
+    final Struct valueB = new Struct(schemaA).put("event", "{\"key\":\"cuba\"}");
     final SinkRecord recordB = new SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
     buffer.add(recordB);
     buffer.flush();
@@ -504,12 +511,13 @@ public class BufferedRecordsTest {
 
   @Test
   public void testInsertModeUpdate() throws SQLException {
-    final String url = sqliteHelper.sqliteUri();
+    final String url = postgresqlHelper.postgreSQL();
     props.put("insert.mode", "update");
+    props.put("upsert.keys", "id");
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-    assertTrue(dbDialect instanceof SqliteDatabaseDialect);
+    assertTrue(dbDialect instanceof PostgreSqlDatabaseDialect);
     final DbStructure dbStructureMock = mock(DbStructure.class);
     when(dbStructureMock.createOrAmendIfNecessary(Matchers.any(JdbcSinkConfig.class),
                                                   Matchers.any(Connection.class),
@@ -518,12 +526,15 @@ public class BufferedRecordsTest {
         .thenReturn(true);
 
     final Connection connectionMock = mock(Connection.class);
+    final PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
+    when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
     final TableId tableId = new TableId(null, null, "dummy");
     final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructureMock,
             connectionMock);
 
-    final Schema schemaA = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
-    final Struct valueA = new Struct(schemaA).put("name", "cuba");
+    final Schema schemaA = SchemaBuilder.struct().field("id", Schema.STRING_SCHEMA)
+            .field("event", Schema.STRING_SCHEMA).build();
+    final Struct valueA = new Struct(schemaA).put("event", "{\"key\":\"cuba\"}");
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
     buffer.add(recordA);
 
@@ -532,7 +543,7 @@ public class BufferedRecordsTest {
     Mockito.verify(
         connectionMock,
         Mockito.times(1)
-    ).prepareStatement(Matchers.eq("UPDATE \"dummy\" SET \"name\" = ?"));
+    ).prepareStatement(Matchers.eq("UPDATE \"dummy\" SET \"id\" = ?, \"event\" = ? WHERE \"id\" = ?"));
 
   }
 
@@ -564,38 +575,9 @@ public class BufferedRecordsTest {
     assertInvalidRecord(true, true, false, true, "with a Struct value and null value schema");
   }
 
-  @Test
-  public void testAddRecordDeleteNotEnabledAndRecordKeyPkMode() throws SQLException {
-    props.put("pk.mode", "record_key");
-    props.put("pk.fields", "id");
-
-    // Delete is not enabled, so therefore require non-null key and key schema,
-    // but any combination of value and value schema works
-    assertValidRecord(true, true, true, true);
-    assertValidRecord(true, true, false, true);
-    assertValidRecord(true, true, true, false);
-    assertValidRecord(true, true, false, false);
-
-    // Fail when null key and null key schema
-    assertInvalidRecord(false, false, true, true, "with a null key and null key schema");
-    assertInvalidRecord(false, false, false, true, "with a null key and null key schema");
-    assertInvalidRecord(false, false, false, false, "with a null key and null key schema");
-
-    // Fail when null key and non-null key schema
-    assertInvalidRecord(true, false, true, true, "with a null key and Struct key schema");
-    assertInvalidRecord(true, false, false, true, "with a null key and Struct key schema");
-    assertInvalidRecord(true, false, false, false, "with a null key and Struct key schema");
-
-    // Fail when non-null key and null key schema
-    assertInvalidRecord(false, true, true, true, "with a Struct key and null key schema");
-    assertInvalidRecord(false, true, false, true, "with a Struct key and null key schema");
-    assertInvalidRecord(false, true, false, false, "with a Struct key and null key schema");
-  }
 
   @Test
   public void testAddRecordDeleteNotEnabledAndRecordValuePkMode() throws SQLException {
-    props.put("pk.mode", "record_value");
-    props.put("pk.fields", "name");
 
     // Delete is not enabled, so therefore require non-null value and value schema,
     // but any combination of key and key schema works
@@ -625,7 +607,6 @@ public class BufferedRecordsTest {
 
   @Test
   public void testAddRecordDeleteNotEnabledAndKafkaPkMode() throws SQLException {
-    props.put("pk.mode", "kafka");
 
     // Delete is not enabled, so therefore allow all combinations of
     // null and non-null key, key schema, value, and value schema
@@ -634,87 +615,35 @@ public class BufferedRecordsTest {
     assertValidRecord(true, false, true, true);
     assertValidRecord(false, false, true, true);
 
-    assertValidRecord(true, true, true, false);
-    assertValidRecord(false, true, true, false);
-    assertValidRecord(true, false, true, false);
-    assertValidRecord(false, false, true, false);
+    assertInvalidRecord(true, true, true, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(false, true, true, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(true, false, true, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(false, false, true, false, "with a non-null Struct value and non-null Struct schema");
 
-    assertValidRecord(true, true, false, true);
-    assertValidRecord(false, true, false, true);
-    assertValidRecord(true, false, false, true);
-    assertValidRecord(false, false, false, true);
+    assertInvalidRecord(true, true, false, true, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(false, true, false, true, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(true, false, false, true, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(false, false, false, true, "with a non-null Struct value and non-null Struct schema");
 
-    assertValidRecord(true, true, false, false);
-    assertValidRecord(false, true, false, false);
-    assertValidRecord(true, false, false, false);
-    assertValidRecord(false, false, false, false);
+    assertInvalidRecord(true, true, false, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(false, true, false, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(true, false, false, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(false, false, false, false, "with a non-null Struct value and non-null Struct schema");
   }
 
   @Test
   public void testAddRecordDeleteEnabledAndNonePkMode() throws SQLException {
     props.put("delete.enabled", true);
-    props.put("pk.mode", "none");
     ConfigException e = assertThrows(ConfigException.class, () -> new JdbcSinkConfig(props));
     assertEquals(
-        "Primary key mode must be 'record_key' when delete support is enabled",
+        "Delete keys configured in delete.keys must be configured with a matching key configured as <newname> in value converter configuration " +
+                "i.e. value.converer.<schemaname>.<oldname>,<newname> when delete.enabled is true",
         e.getMessage()
     );
   }
 
-  @Test
-  public void testAddRecordDeleteEnabledAndRecordValuePkMode() throws SQLException {
-    props.put("delete.enabled", true);
-    props.put("pk.mode", "record_value");
-    props.put("pk.fields", "name");
-    ConfigException e = assertThrows(ConfigException.class, () -> new JdbcSinkConfig(props));
-    assertEquals(
-        "Primary key mode must be 'record_key' when delete support is enabled",
-        e.getMessage()
-    );
-  }
 
-  @Test
-  public void testAddRecordDeleteEnabledAndKafkaPkMode() throws SQLException {
-    props.put("delete.enabled", true);
-    props.put("pk.mode", "kafka");
-    ConfigException e = assertThrows(ConfigException.class, () -> new JdbcSinkConfig(props));
-    assertEquals(
-        "Primary key mode must be 'record_key' when delete support is enabled",
-        e.getMessage()
-    );
-  }
 
-  @Test
-  public void testAddRecordDeleteEnabledAndRecordKeyPkMode() throws SQLException {
-    // Enabling delete requires 'record_key' pk mode
-    props.put("delete.enabled", true);
-    props.put("pk.mode", "record_key");
-    props.put("pk.fields", "id");
-
-    // Non-null key schema and key, but with various combinations of value schema and value
-    assertValidRecord(true, true, true, true);
-    assertValidRecord(true, true, true, true);
-    assertValidRecord(true, true, false, false);
-    assertValidRecord(true, true, false, false);
-
-    // Invalid when null key and null key schema
-    assertInvalidRecord(false, false, true, true, "with a null key");
-    assertInvalidRecord(false, false, false, true, "with a null key");
-    assertInvalidRecord(false, false, true, false, "with a null key");
-    assertInvalidRecord(false, false, false, false, "with a null key");
-
-    // Invalid when null key and non-null key schema
-    assertInvalidRecord(true, false, true, true, "with a null key");
-    assertInvalidRecord(true, false, false, true, "with a null key");
-    assertInvalidRecord(true, false, true, false, "with a null key");
-    assertInvalidRecord(true, false, false, false, "with a null key");
-
-    // Invalid when non-null key and null key schema
-    assertInvalidRecord(false, true, true, true, "with a Struct key and null key schema");
-    assertInvalidRecord(false, true, false, true, "with a Struct key and null key schema");
-    assertInvalidRecord(false, true, true, true, "with a Struct key and null key schema");
-    assertInvalidRecord(false, true, false, false, "with a Struct key and null key schema");
-  }
 
   protected SinkRecord generateRecord(
       boolean includeKeySchema,
@@ -751,12 +680,12 @@ public class BufferedRecordsTest {
   protected void assertInvalidRecord(SinkRecord record, String errorMessageFragment) {
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-    final String url = sqliteHelper.sqliteUri();
+    final String url = postgresqlHelper.postgreSQL();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, postgresqlHelper.connection);
 
     ConnectException e = assertThrows(ConnectException.class, () -> {
       buffer.add(record);
@@ -783,12 +712,12 @@ public class BufferedRecordsTest {
     props.put("batch.size", 2);
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-    final String url = sqliteHelper.sqliteUri();
+    final String url = postgresqlHelper.postgreSQL();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, postgresqlHelper.connection);
 
     List<SinkRecord> flushed = buffer.add(record);
     assertEquals(Collections.emptyList(), flushed);

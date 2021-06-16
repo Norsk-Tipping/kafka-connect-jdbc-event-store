@@ -15,20 +15,19 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.util.CachedConnectionProvider;
-import io.confluent.connect.jdbc.util.TableId;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class JdbcDbWriter {
   private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
@@ -43,25 +42,36 @@ public class JdbcDbWriter {
     this.dbDialect = dbDialect;
     this.dbStructure = dbStructure;
 
-    this.cachedConnectionProvider = new CachedConnectionProvider(this.dbDialect) {
+    this.cachedConnectionProvider = connectionProvider(
+        config.connectionAttempts,
+        config.connectionBackoffMs
+    );
+  }
+
+  protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
+    return new CachedConnectionProvider(this.dbDialect, maxConnAttempts, retryBackoff) {
       @Override
-      protected void onConnect(Connection connection) throws SQLException {
+      protected void onConnect(final Connection connection) throws SQLException {
         log.info("JdbcDbWriter Connected");
         connection.setAutoCommit(false);
       }
     };
   }
 
-  void write(final Collection<SinkRecord> records) throws SQLException {
+  void write(final Collection<SinkRecord> records) throws SQLException, TableAlterOrCreateException {
     final Connection connection = cachedConnectionProvider.getConnection();
 
     final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
     for (SinkRecord record : records) {
+      record.headers().clear();
       final TableId tableId = destinationTable(record.topic());
       BufferedRecords buffer = bufferByTable.get(tableId);
       if (buffer == null) {
         buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
         bufferByTable.put(tableId, buffer);
+      }
+      if (config.insertMode == JdbcSinkConfig.InsertMode.UPSERT && record.value() != null) {
+        record.headers().addBoolean("UPSERTDELETE", true);
       }
       buffer.add(record);
     }

@@ -15,10 +15,10 @@
 
 package io.confluent.connect.jdbc.util;
 
-import java.util.stream.Stream;
-
 import org.apache.kafka.common.config.ConfigException;
 import org.junit.Test;
+
+import java.util.stream.Stream;
 
 public class TimeZoneValidatorTest {
 

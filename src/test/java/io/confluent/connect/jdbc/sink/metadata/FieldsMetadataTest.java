@@ -11,7 +11,8 @@
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations under the License.
- */
+ *//*
+
 
 package io.confluent.connect.jdbc.sink.metadata;
 
@@ -143,10 +144,12 @@ public class FieldsMetadataTest {
     );
   }
 
-  /**
+  */
+/**
    * RECORD_KEY test cases:
    * if keySchema is a struct, pkCols must be a subset of the keySchema fields
-   */
+   *//*
+
 
   @Test
   public void recordKeyPkModePrimitiveKey() {
@@ -315,3 +318,4 @@ public class FieldsMetadataTest {
     return FieldsMetadata.extract("table", pkMode, pkFields, whitelist, keySchema, valueSchema);
   }
 }
+*/

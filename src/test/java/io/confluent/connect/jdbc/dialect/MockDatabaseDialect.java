@@ -15,9 +15,8 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import org.apache.kafka.common.config.AbstractConfig;
-
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
+import org.apache.kafka.common.config.AbstractConfig;
 
 public class MockDatabaseDialect extends GenericDatabaseDialect {
 

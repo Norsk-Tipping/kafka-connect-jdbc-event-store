@@ -15,14 +15,13 @@
 
 package io.confluent.connect.jdbc.util;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.config.ConfigException;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import io.confluent.connect.jdbc.dialect.DatabaseDialects;
-
-import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.config.ConfigException;
 
 public class DatabaseDialectRecommender implements ConfigDef.Recommender, ConfigDef.Validator {
 

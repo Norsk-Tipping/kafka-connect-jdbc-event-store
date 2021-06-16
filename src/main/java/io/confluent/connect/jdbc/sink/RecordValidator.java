@@ -16,7 +16,6 @@
 package io.confluent.connect.jdbc.sink;
 
 import io.confluent.connect.jdbc.util.StringUtils;
-
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -48,23 +47,13 @@ public interface RecordValidator {
 
     RecordValidator keyValidator = NO_OP;
     RecordValidator valueValidator = NO_OP;
-    switch (config.pkMode) {
-      case RECORD_KEY:
-        keyValidator = keyValidator.and(requiresKey);
-        break;
-      case RECORD_VALUE:
-      case NONE:
-        valueValidator = valueValidator.and(requiresValue);
-        break;
-      case KAFKA:
-      default:
-        // no primary key is required
-        break;
-    }
 
     if (config.deleteEnabled) {
       // When delete is enabled, we need a key
       keyValidator = keyValidator.and(requiresKey);
+    } else {
+      // When delete is disabled, we need non-tombstone values
+      valueValidator = valueValidator.and(requiresValue);
     }
 
     // Compose the validator that may or may be NO_OP
@@ -81,15 +70,13 @@ public interface RecordValidator {
       }
       throw new ConnectException(
           String.format(
-              "Sink connector '%s' is configured with '%s=%s' and '%s=%s' and therefore requires "
+              "Sink connector '%s' is configured with '%s=%s' and therefore requires "
               + "records with a non-null Struct value and non-null Struct schema, "
               + "but found record at (topic='%s',partition=%d,offset=%d,timestamp=%d) "
               + "with a %s value and %s value schema.",
               config.connectorName(),
               JdbcSinkConfig.DELETE_ENABLED,
               config.deleteEnabled,
-              JdbcSinkConfig.PK_MODE,
-              config.pkMode.toString().toLowerCase(),
               record.topic(),
               record.kafkaPartition(),
               record.kafkaOffset(),
@@ -111,15 +98,13 @@ public interface RecordValidator {
       }
       throw new ConnectException(
           String.format(
-              "Sink connector '%s' is configured with '%s=%s' and '%s=%s' and therefore requires "
+              "Sink connector '%s' is configured with '%s=%s' and therefore requires "
               + "records with a non-null key and non-null Struct or primitive key schema, "
               + "but found record at (topic='%s',partition=%d,offset=%d,timestamp=%d) "
               + "with a %s key and %s key schema.",
               config.connectorName(),
               JdbcSinkConfig.DELETE_ENABLED,
               config.deleteEnabled,
-              JdbcSinkConfig.PK_MODE,
-              config.pkMode.toString().toLowerCase(),
               record.topic(),
               record.kafkaPartition(),
               record.kafkaOffset(),

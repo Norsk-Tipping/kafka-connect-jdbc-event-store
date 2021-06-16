@@ -15,6 +15,10 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect.StatementBinder;
+import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.data.Field;
@@ -25,87 +29,79 @@ import org.apache.kafka.connect.sink.SinkRecord;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.dialect.DatabaseDialect.StatementBinder;
-import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
-import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
+import java.util.Optional;
+import java.util.Set;
 
 import static java.util.Objects.isNull;
 
 public class PreparedStatementBinder implements StatementBinder {
 
-  private final JdbcSinkConfig.PrimaryKeyMode pkMode;
   private final PreparedStatement statement;
   private final SchemaPair schemaPair;
   private final FieldsMetadata fieldsMetadata;
   private final JdbcSinkConfig.InsertMode insertMode;
   private final DatabaseDialect dialect;
   private final TableDefinition tabDef;
+  private final Boolean coordinates;
 
   @Deprecated
   public PreparedStatementBinder(
       DatabaseDialect dialect,
       PreparedStatement statement,
-      JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
-      JdbcSinkConfig.InsertMode insertMode
+      JdbcSinkConfig.InsertMode insertMode,
+      final Boolean coordinates
   ) {
     this(
         dialect,
         statement,
-        pkMode,
         schemaPair,
         fieldsMetadata,
         null,
-        insertMode
+        insertMode,
+        coordinates
     );
   }
 
   public PreparedStatementBinder(
       DatabaseDialect dialect,
       PreparedStatement statement,
-      JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
       TableDefinition tabDef,
-      JdbcSinkConfig.InsertMode insertMode
+      JdbcSinkConfig.InsertMode insertMode,
+      Boolean coordinates
   ) {
     this.dialect = dialect;
-    this.pkMode = pkMode;
     this.statement = statement;
     this.schemaPair = schemaPair;
     this.fieldsMetadata = fieldsMetadata;
     this.insertMode = insertMode;
     this.tabDef = tabDef;
+    this.coordinates = coordinates;
   }
 
   @Override
   public void bindRecord(SinkRecord record) throws SQLException {
     final Struct valueStruct = (Struct) record.value();
     final boolean isDelete = isNull(valueStruct);
-    // Assumption: the relevant SQL has placeholders for keyFieldNames first followed by
-    //             nonKeyFieldNames, in iteration order for all INSERT/ UPSERT queries
-    //             the relevant SQL has placeholders for keyFieldNames,
-    //             in iteration order for all DELETE queries
-    //             the relevant SQL has placeholders for nonKeyFieldNames first followed by
-    //             keyFieldNames, in iteration order for all UPDATE queries
+    final boolean isUpsertDelete = record.headers().allWithName("UPSERTDELETE").hasNext();
 
     int index = 1;
-    if (isDelete) {
-      bindKeyFields(record, index);
+    if (isUpsertDelete) {
+      bindKeyFields(record, index, fieldsMetadata.upsertKeyFieldNames, false);
+    } else if (isDelete) {
+      bindKeyFields(record, index, fieldsMetadata.deleteKeyFieldNames, true);
     } else {
       switch (insertMode) {
         case INSERT:
-        case UPSERT:
-          index = bindKeyFields(record, index);
           bindNonKeyFields(record, valueStruct, index);
           break;
 
         case UPDATE:
           index = bindNonKeyFields(record, valueStruct, index);
-          bindKeyFields(record, index);
+          bindKeyFields(record, index, fieldsMetadata.upsertKeyFieldNames, false);
           break;
         default:
           throw new AssertionError();
@@ -115,50 +111,44 @@ public class PreparedStatementBinder implements StatementBinder {
     statement.addBatch();
   }
 
-  protected int bindKeyFields(SinkRecord record, int index) throws SQLException {
-    switch (pkMode) {
-      case NONE:
-        if (!fieldsMetadata.keyFieldNames.isEmpty()) {
-          throw new AssertionError();
-        }
-        break;
-
-      case KAFKA: {
-        assert fieldsMetadata.keyFieldNames.size() == 3;
-        bindField(index++, Schema.STRING_SCHEMA, record.topic(),
-            JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(0));
-        bindField(index++, Schema.INT32_SCHEMA, record.kafkaPartition(),
-            JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(1));
-        bindField(index++, Schema.INT64_SCHEMA, record.kafkaOffset(),
-            JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(2));
-      }
-      break;
-
-      case RECORD_KEY: {
+  protected int bindKeyFields(SinkRecord record, int index, Set<String> keyFieldNames, boolean fromRecordKey) throws SQLException {
+      if (fromRecordKey) {
         if (schemaPair.keySchema.type().isPrimitive()) {
-          assert fieldsMetadata.keyFieldNames.size() == 1;
+          assert keyFieldNames.size() == 1;
+          if (record.key() == null) { throw new ConnectException(String.format(
+                  "Could not process tombstone because %s is not found in record key is null",
+                  keyFieldNames
+                  ));
+          }
           bindField(index++, schemaPair.keySchema, record.key(),
-              fieldsMetadata.keyFieldNames.iterator().next());
+              keyFieldNames.iterator().next());
         } else {
-          for (String fieldName : fieldsMetadata.keyFieldNames) {
+          for (String fieldName : keyFieldNames) {
             final Field field = schemaPair.keySchema.field(fieldName);
-            bindField(index++, field.schema(), ((Struct) record.key()).get(field), fieldName);
+            final Object fieldValue = ((Struct) record.key()).get(field);
+            if (fieldValue == null) { throw new ConnectException(String.format(
+                    "Could not process tombstone because %s is not found in record key",
+                    field
+            ));
+            }
+            bindField(index++, field.schema(), fieldValue, fieldName);
           }
         }
+      } else {
+          for (String fieldName : keyFieldNames) {
+            final Field field = schemaPair.valueSchema.field(fieldName);
+            final Object fieldValue = Optional.ofNullable((Struct) record.value())
+                    .map(r -> r.get(field)).orElse(null);
+            if (fieldValue == null) {
+              throw new ConnectException(String.format(
+                      "Could not process %s because %s is not found in record value",
+                      insertMode,
+                      field
+              ));
+            }
+            bindField(index++, field.schema(), fieldValue, fieldName);
+          }
       }
-      break;
-
-      case RECORD_VALUE: {
-        for (String fieldName : fieldsMetadata.keyFieldNames) {
-          final Field field = schemaPair.valueSchema.field(fieldName);
-          bindField(index++, field.schema(), ((Struct) record.value()).get(field), fieldName);
-        }
-      }
-      break;
-
-      default:
-        throw new ConnectException("Unknown primary key mode: " + pkMode);
-    }
     return index;
   }
 
@@ -167,7 +157,23 @@ public class PreparedStatementBinder implements StatementBinder {
       Struct valueStruct,
       int index
   ) throws SQLException {
+    if (coordinates) {
+      bindField(index++, Schema.STRING_SCHEMA, record.topic(),
+              JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(0));
+      bindField(index++, Schema.INT32_SCHEMA, record.kafkaPartition(),
+              JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(1));
+      bindField(index++, Schema.INT64_SCHEMA, record.kafkaOffset(),
+              JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(2));
+    }
+
     for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
+      if (JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.contains(fieldName)) {continue; }
+      if ((fieldsMetadata.deleteKeyFieldNames.contains(fieldName) || fieldsMetadata.upsertKeyFieldNames.contains(fieldName)) && valueStruct.get(fieldName) == null) {
+        throw new ConnectException(
+                String.format("Can't insert record with null for key value used in deletes or upserts in record value struct for field: %s\n" +
+                        "If you have this value available in every key of every message on the source topic, use SMT to add this field to the " +
+                        "Kafka Connect Struct value.", fieldName)
+        ); }
       final Field field = record.valueSchema().field(fieldName);
       bindField(index++, field.schema(), valueStruct.get(field), fieldName);
     }
