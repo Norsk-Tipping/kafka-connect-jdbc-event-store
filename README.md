@@ -7,6 +7,8 @@
 The Kafka Connect JDBC RDBMS JSON Event Store Sink Connector allows you to export data from Kafka topics in JSON or Avro format
 to the following RDBMSs (Netezza Performance Server, Oracle Exadata, Postgresql).
 
+![](readme_pics/overview.png)
+
 The connector polls data from Kafka to write to the database based on the topics subscription.
 The connector supports the different subject naming strategies in case of Avro and is therefore capable of handling multiple Avro
 schema structures. In case of a source topic where messages are serialized as JSON, the connector allows schema-less consumption.
@@ -27,6 +29,9 @@ Auto-creation of tables, and limited auto-evolution is also supported.
 
 The connector extends the Confluent jdbc sink connector:
 https://github.com/confluentinc/kafka-connect-jdbc
+
+The connector depends on the following Kafka Connect converter:
+https://github.com/gertschouten/kafka-connect-converter-json
 
 # Config parameters:
 The following lists configuration options of the connector that are in addition (most) of the configuration parameters listed at
