@@ -175,7 +175,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         builder.append(i);
         builder.append(" PARTITION OF ");
         builder.append(table);
-        builder.append(" FOR VALUES WITH (modulus 10, remainder ");
+        builder.append(" FOR VALUES WITH (modulus ");
+        builder.append(partitions());
+        builder.append(", remainder ");
         builder.append(i);
         builder.append(")");
         if (i<partitions()-1) {builder.append(";");}
