@@ -26,8 +26,6 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
 
 public class JdbcDbWriter {
   private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
@@ -61,28 +59,25 @@ public class JdbcDbWriter {
   void write(final Collection<SinkRecord> records) throws SQLException, TableAlterOrCreateException {
     final Connection connection = cachedConnectionProvider.getConnection();
 
-    final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
+    BufferedRecords buffer = null;
+    TableId tableId = null;
     for (SinkRecord record : records) {
       record.headers().clear();
-      final TableId tableId = destinationTable(record.topic());
-      BufferedRecords buffer = bufferByTable.get(tableId);
+      if (tableId == null) {
+        tableId = destinationTable(record.topic());
+      }
       if (buffer == null) {
         buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
-        bufferByTable.put(tableId, buffer);
       }
       if (config.insertMode == JdbcSinkConfig.InsertMode.UPSERT && record.value() != null) {
         record.headers().addBoolean("UPSERTDELETE", true);
       }
       buffer.add(record);
     }
-    for (Map.Entry<TableId, BufferedRecords> entry : bufferByTable.entrySet()) {
-      TableId tableId = entry.getKey();
-      BufferedRecords buffer = entry.getValue();
       log.debug("Flushing records in JDBC Writer for table ID: {}", tableId);
       buffer.flush();
       buffer.close();
-    }
-    connection.commit();
+      connection.commit();
   }
 
   void closeQuietly() {
