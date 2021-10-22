@@ -58,7 +58,7 @@ public class JdbcDbWriter {
 
   void write(final Collection<SinkRecord> records) throws SQLException, TableAlterOrCreateException {
     final Connection connection = cachedConnectionProvider.getConnection();
-
+    log.debug("Received {} sink records", records.size());
     BufferedRecords buffer = null;
     TableId tableId = null;
     for (SinkRecord record : records) {
@@ -69,8 +69,10 @@ public class JdbcDbWriter {
       if (buffer == null) {
         buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
       }
-      if (config.insertMode == JdbcSinkConfig.InsertMode.UPSERT && record.value() != null) {
-        record.headers().addBoolean("UPSERTDELETE", true);
+      if(config.insertMode != JdbcSinkConfig.InsertMode.INSERT) {
+        if (config.insertMode == JdbcSinkConfig.InsertMode.UPSERT && record.value() != null) {
+          record.headers().addBoolean("UPSERTDELETE", true);
+        }
       }
       buffer.add(record);
     }

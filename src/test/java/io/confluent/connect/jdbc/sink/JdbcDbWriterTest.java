@@ -2791,6 +2791,7 @@ public class JdbcDbWriterTest {
     System.out.println(refreshedMetadata);
   }
 
+  @Test
   public void autoCreateWithAutoEvolvePerformance() throws SQLException, RestClientException, IOException {
     Map<String, String> props = new HashMap<>();
     props.put("connection.url", postgresqlHelper.postgreSQL());
@@ -2803,6 +2804,7 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
+    props.put("batch.size", "10000");
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
 
@@ -2844,12 +2846,12 @@ public class JdbcDbWriterTest {
     String expected = struct.toString();
 
     writer = newWriter(props);
-    ArrayList<SinkRecord> list = new ArrayList<>();
-    for (int j=0; j< 10; j++) {
+    for (int j=0; j< 100; j++) {
+      ArrayList<SinkRecord> list = new ArrayList<>();
       for (int i = 0; i < 10000; i++) {
         SchemaAndValue schemaAndValue = converter.toConnectData(TOPIC, serializer.serialize(TOPIC, struct));
         final SinkRecord recordA = new SinkRecord(TOPIC, 0, null, null, schemaAndValue.schema(), schemaAndValue.value(), 0);
-        System.out.println(recordA);
+        //System.out.println(recordA);
         list.add(recordA);
       }
       writer.write(list);

@@ -106,7 +106,7 @@ public class BufferedRecords {
         // flush so an insert after a delete of same record isn't lost
         flushed.addAll(flush());
       }
-      if (record.headers().allWithName("UPSERTDELETE").hasNext()) {
+      if (!record.headers().isEmpty() && record.headers().allWithName("UPSERTDELETE").hasNext()) {
         // in case there have been buffered up upserts with the same key, flush
         if (keys.contains(config.upsertKeys.stream().map(uk -> ((Struct) record.value()).get(uk)).collect(Collectors.toList()))) {
           // flush so a tombstone after an upsert-related-delete-insert cycle of same record isn't lost
@@ -215,7 +215,7 @@ public class BufferedRecords {
     // set deletesInBatch if schema value is not null
     if (isNull(record.value()) && config.deleteEnabled) {
       deletesInBatch = true;
-    } else if (record.headers().allWithName("UPSERTDELETE").hasNext()) {
+    } else if (!record.headers().isEmpty() && record.headers().allWithName("UPSERTDELETE").hasNext()) {
       upsertDeletesInBatch = true;
       updatesInBatch = true;
       keys.add(config.upsertKeys.stream().map(uk -> ((Struct) record.value()).get(uk)).collect(Collectors.toList()));
@@ -258,7 +258,7 @@ public class BufferedRecords {
       long totalDeleteCount = executeDeletes();
 
       final long expectedCount = updateRecordCount();
-      log.trace("{} records:{} resulting in totalUpdateCount:{} totalDeleteCount:{}",
+      log.debug("{} records:{} resulting in totalUpdateCount:{} totalDeleteCount:{}",
               config.insertMode, records.size(), totalUpdateCount, totalDeleteCount
       );
       if (totalUpdateCount.filter(total -> total != expectedCount).isPresent()
@@ -270,7 +270,7 @@ public class BufferedRecords {
         ));
       }
       if (!totalUpdateCount.isPresent()) {
-        log.info(
+        log.debug(
                 "{} records:{} , but no count of the number of rows it affected is available",
                 config.insertMode,
                 records.size()
