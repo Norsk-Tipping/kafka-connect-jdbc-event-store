@@ -132,10 +132,10 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
 
     if (schema.type() == Type.STRING) {
       if (colDef.type() == Types.BLOB) {
-        statement.setObject(index, ((String)value).getBytes());
+        statement.setBytes(index, ((String)value).getBytes());
         return true;
       } else if (colDef.type() == Types.CLOB) {
-        statement.setCharacterStream(index, new StringReader((String) value));
+        statement.setObject(index, ((String) value).getBytes());
         return true;
       } else if (colDef.type() == Types.NCLOB) {
         statement.setNCharacterStream(index, new StringReader((String) value));
