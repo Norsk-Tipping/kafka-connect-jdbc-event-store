@@ -235,15 +235,17 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     builder.append(table);
     builder.append(" (");
     writeColumnsSpec(builder, fields);
-    builder.append(",");
+/*    builder.append(",");
     builder.append(System.lineSeparator());
     builder.append("CONSTRAINT ");
     builder.append(table.tableName());
     builder.append("_ensure_json ");
     builder.append("CHECK (");
     builder.appendColumnName(converterPayloadFieldName());
-    builder.append(" IS JSON)");
+    builder.append(" IS JSON)");*/
     builder.append(")");
+    builder.append(System.lineSeparator());
+    builder.append(" NOLOGGING ");
     if (!distributionAttributes().isEmpty()) {
       builder.append(System.lineSeparator());
       builder.append("PARTITION BY HASH (");
@@ -265,7 +267,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     }
     if (!clusteredAttributes().isEmpty()) {
       builder.append(System.lineSeparator());
-      builder.append("CLUSTERING BY INTERLEAVED ORDER (");
+      builder.append(" CLUSTERING BY LINEAR ORDER (");
       builder.appendList()
               .delimitedBy(",")
               .transformedBy(ExpressionBuilder.quote())
