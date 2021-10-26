@@ -167,7 +167,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
                 assertEquals(42, rs.getLong("connect_offset"));
                 JSONObject expectedJsonObject = new JSONObject(expected);
                 JSONObject resultJsonObject = new JSONObject(rs.getString("event"));
-                expectedJsonObject.keys().forEachRemaining(k -> assertEquals(resultJsonObject.get(k), expectedJsonObject.get(k)));
+                expectedJsonObject.keys().forEachRemaining(k -> assertEquals(expectedJsonObject.get(k), resultJsonObject.get(k)));
               }
             }
         )
@@ -233,7 +233,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
               public void read(ResultSet rs) throws SQLException {
                 JSONObject expectedJsonObject = new JSONObject(expected);
                 JSONObject resultJsonObject = new JSONObject(rs.getString("event"));
-                expectedJsonObject.keys().forEachRemaining(k -> assertEquals(resultJsonObject.get(k), expectedJsonObject.get(k)));
+                expectedJsonObject.keys().forEachRemaining(k -> assertEquals(expectedJsonObject.get(k), resultJsonObject.get(k)));
               }
             }
         )

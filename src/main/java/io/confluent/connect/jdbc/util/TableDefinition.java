@@ -68,7 +68,7 @@ public class TableDefinition {
   }
 
   public ColumnDefinition definitionForColumn(String name) {
-    return columnsByName.get(name);
+    return columnsByName.get(name.toUpperCase());
   }
 
   public Collection<ColumnDefinition> definitionsForColumns() {

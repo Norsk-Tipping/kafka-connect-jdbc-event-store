@@ -39,6 +39,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static io.confluent.connect.jdbc.sink.PostgresqlHelper.tablesUsed;
+
 public class JdbcDbReadmeTest {
 
   private final PostgresqlHelper postgresqlHelper = new PostgresqlHelper(getClass().getSimpleName());
@@ -53,7 +55,7 @@ public class JdbcDbReadmeTest {
   @Before
   public void setUp() throws IOException, SQLException {
     postgresqlHelper.setUp();
-    //tablesUsed.add(TOPIC);
+    tablesUsed.add(TOPIC);
     schemaRegistry = new MockSchemaRegistryClient();
     converter = new JsonConverter(schemaRegistry);
     serializer = new KafkaAvroSerializer(schemaRegistry);

@@ -86,7 +86,7 @@ public class PreparedStatementBinder implements StatementBinder {
   public void bindRecord(SinkRecord record) throws SQLException {
     final Struct valueStruct = (Struct) record.value();
     final boolean isDelete = isNull(valueStruct);
-    final boolean isUpsertDelete = record.headers().allWithName("UPSERTDELETE").hasNext();
+    boolean isUpsertDelete = !record.headers().isEmpty() && record.headers().allWithName("UPSERTDELETE").hasNext();
 
     int index = 1;
     if (isUpsertDelete) {
@@ -166,14 +166,32 @@ public class PreparedStatementBinder implements StatementBinder {
               JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(2));
     }
 
+    if (!fieldsMetadata.deleteKeyFieldNames.isEmpty()){
+      fieldsMetadata.deleteKeyFieldNames.forEach(fn -> {
+        if(valueStruct.get(fn) == null) {
+          throw new ConnectException(
+                  String.format("Can't insert record with null for key value used in deletes or upserts in record value struct for field: %s\n" +
+                          "If you have this value available in every key of every message on the source topic, use SMT to add this field to the " +
+                          "Kafka Connect Struct value.", fn)
+          );
+        }
+        });
+    }
+
+    if ((insertMode != JdbcSinkConfig.InsertMode.INSERT)) {
+      fieldsMetadata.upsertKeyFieldNames.forEach(fn -> {
+        if(valueStruct.get(fn) == null) {
+          throw new ConnectException(
+                  String.format("Can't insert record with null for key value used in deletes or upserts in record value struct for field: %s\n" +
+                          "If you have this value available in every key of every message on the source topic, use SMT to add this field to the " +
+                          "Kafka Connect Struct value.", fn)
+          );
+        }
+      });
+    }
+
     for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
       if (JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.contains(fieldName)) {continue; }
-      if ((fieldsMetadata.deleteKeyFieldNames.contains(fieldName) || fieldsMetadata.upsertKeyFieldNames.contains(fieldName)) && valueStruct.get(fieldName) == null) {
-        throw new ConnectException(
-                String.format("Can't insert record with null for key value used in deletes or upserts in record value struct for field: %s\n" +
-                        "If you have this value available in every key of every message on the source topic, use SMT to add this field to the " +
-                        "Kafka Connect Struct value.", fieldName)
-        ); }
       final Field field = record.valueSchema().field(fieldName);
       bindField(index++, field.schema(), valueStruct.get(field), fieldName);
     }
@@ -188,7 +206,7 @@ public class PreparedStatementBinder implements StatementBinder {
 
   protected void bindField(int index, Schema schema, Object value, String fieldName)
       throws SQLException {
-    ColumnDefinition colDef = tabDef == null ? null : tabDef.definitionForColumn(fieldName);
+    ColumnDefinition colDef = tabDef == null ? null : tabDef.definitionForColumn(fieldName.toUpperCase());
     dialect.bindField(statement, index, schema, value, colDef);
   }
 }
