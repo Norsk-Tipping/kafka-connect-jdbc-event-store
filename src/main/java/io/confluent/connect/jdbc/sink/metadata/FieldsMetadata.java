@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.sink.metadata;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 
 import java.util.*;
@@ -184,23 +185,38 @@ public class FieldsMetadata {
     final String topicFieldName = it.next();
     allFields.put(
         topicFieldName,
-        new SinkRecordField(Schema.STRING_SCHEMA, topicFieldName, true)
+        new SinkRecordField(Schema.STRING_SCHEMA, topicFieldName, false)
     );
     nonKeyFieldNames.add(topicFieldName);
 
     final String partitionFieldName = it.next();
     allFields.put(
         partitionFieldName,
-        new SinkRecordField(Schema.INT32_SCHEMA, partitionFieldName, true)
+        new SinkRecordField(Schema.INT32_SCHEMA, partitionFieldName, false)
     );
     nonKeyFieldNames.add(partitionFieldName);
 
     final String offsetFieldName = it.next();
     allFields.put(
         offsetFieldName,
-        new SinkRecordField(Schema.INT64_SCHEMA, offsetFieldName, true)
+        new SinkRecordField(Schema.INT64_SCHEMA, offsetFieldName, false)
     );
     nonKeyFieldNames.add(offsetFieldName);
+
+    final String timestampFieldName = it.next();
+    allFields.put(
+            timestampFieldName,
+            new SinkRecordField(Timestamp.builder().optional().build(), timestampFieldName, false)
+    );
+    nonKeyFieldNames.add(timestampFieldName);
+
+    final String timestampTypeFieldName = it.next();
+    allFields.put(
+            timestampTypeFieldName,
+            new SinkRecordField(Schema.STRING_SCHEMA, timestampTypeFieldName, false)
+    );
+    nonKeyFieldNames.add(timestampTypeFieldName);
+
   }
 
   private static void extractRecordKeyPk(

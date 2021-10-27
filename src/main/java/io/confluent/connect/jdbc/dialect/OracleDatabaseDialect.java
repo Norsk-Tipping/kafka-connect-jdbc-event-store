@@ -245,7 +245,6 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     builder.append(" IS JSON)");*/
     builder.append(")");
     builder.append(System.lineSeparator());
-    builder.append(" NOLOGGING ");
     if (!distributionAttributes().isEmpty()) {
       builder.append(System.lineSeparator());
       builder.append("PARTITION BY HASH (");
@@ -279,6 +278,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       builder.append(System.lineSeparator());
       builder.append("CREATE MATERIALIZED ZONEMAP ");
       builder.append(table.tableName() +"_zmap ");
+      builder.append(" REFRESH FAST ON COMMIT ");
       builder.append("ON ");
       builder.append(table);
       builder.append(" (");

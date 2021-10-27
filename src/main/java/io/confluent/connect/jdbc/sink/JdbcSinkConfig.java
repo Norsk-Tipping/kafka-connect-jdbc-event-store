@@ -45,7 +45,9 @@ public class JdbcSinkConfig extends AbstractConfig {
       Arrays.asList(
           "connect_topic",
           "connect_partition",
-          "connect_offset"
+          "connect_offset",
+          "connect_timestamp",
+          "connect_timestamp_type"
       )
   );
 

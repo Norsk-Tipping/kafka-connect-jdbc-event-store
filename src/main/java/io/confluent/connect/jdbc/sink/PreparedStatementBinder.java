@@ -24,11 +24,13 @@ import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Date;
 import java.util.Optional;
 import java.util.Set;
 
@@ -164,6 +166,10 @@ public class PreparedStatementBinder implements StatementBinder {
               JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(1));
       bindField(index++, Schema.INT64_SCHEMA, record.kafkaOffset(),
               JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(2));
+      bindField(index++, Timestamp.builder().optional().build(), record.timestamp() != null ? Timestamp.toLogical(Timestamp.SCHEMA, record.timestamp()) : null,
+              JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(3));
+      bindField(index++, Schema.STRING_SCHEMA, record.timestampType().name,
+              JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(4));
     }
 
     if (!fieldsMetadata.deleteKeyFieldNames.isEmpty()){
