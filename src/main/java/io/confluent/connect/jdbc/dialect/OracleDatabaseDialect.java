@@ -33,6 +33,7 @@ import org.apache.kafka.connect.errors.ConnectException;
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.Collection;
 import java.util.Collections;
@@ -132,7 +133,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
 
     if (schema.type() == Type.STRING) {
       if (colDef.type() == Types.BLOB) {
-        statement.setBytes(index, ((String)value).getBytes());
+        statement.setBytes(index, ((String)value).getBytes(super.dbEncoding));
         return true;
       } else if (colDef.type() == Types.CLOB) {
         statement.setString(index, ((String) value));

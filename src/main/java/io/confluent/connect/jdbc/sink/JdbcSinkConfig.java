@@ -21,6 +21,8 @@ import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -31,6 +33,12 @@ public class JdbcSinkConfig extends AbstractConfig {
     INSERT,
     UPSERT,
     UPDATE;
+
+  }
+
+  public enum DBEncoding {
+    UTF8,
+    UTF16;
 
   }
 
@@ -216,6 +224,13 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "specific dialect. All properly-packaged dialects in the JDBC connector plugin "
       + "can be used.";
 
+  public static final String DB_ENCODING = "db.encoding";
+  private static final String DB_ENCODING_DISPLAY = "Database Encoding";
+  public static final String DB_ENCODING_DEFAULT = "UTF8";
+  private static final String DB_ENCODING_DOC =
+          "The name of the encoding the target db uses. By default UTF8 is used. " +
+                  "Set this to UTF16 in case this encoding is used.";
+
   public static final String DB_TIMEZONE_CONFIG = "db.timezone";
   public static final String DB_TIMEZONE_DEFAULT = "UTC";
   private static final String DB_TIMEZONE_CONFIG_DOC =
@@ -337,6 +352,18 @@ public class JdbcSinkConfig extends AbstractConfig {
             DatabaseDialectRecommender.INSTANCE
         )
         .define(
+            DB_ENCODING,
+            ConfigDef.Type.STRING,
+            DB_ENCODING_DEFAULT,
+            EnumValidator.in(DBEncoding.values()),
+            ConfigDef.Importance.MEDIUM,
+            DB_ENCODING_DOC,
+            CONNECTION_GROUP,
+            5,
+            ConfigDef.Width.MEDIUM,
+            DB_ENCODING_DISPLAY
+        )
+        .define(
             CONNECTION_ATTEMPTS,
             ConfigDef.Type.INT,
             CONNECTION_ATTEMPTS_DEFAULT,
@@ -344,7 +371,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Importance.LOW,
             CONNECTION_ATTEMPTS_DOC,
             CONNECTION_GROUP,
-            5,
+            6,
             ConfigDef.Width.SHORT,
             CONNECTION_ATTEMPTS_DISPLAY
         ).define(
@@ -354,7 +381,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Importance.LOW,
             CONNECTION_BACKOFF_DOC,
             CONNECTION_GROUP,
-            6,
+            7,
             ConfigDef.Width.SHORT,
             CONNECTION_BACKOFF_DISPLAY
         )
@@ -632,6 +659,7 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   //public final Set<String> fieldsWhitelist;
   public final String dialectName;
+  public final Charset dbEncoding;
   public final TimeZone timeZone;
   public final EnumSet<TableType> tableTypes;
   public final String payloadFieldName;
@@ -662,6 +690,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     upsertKeys = new HashSet<>(getList(UPSERT_KEYS));
     deleteKeys = new HashSet<>(getList(DELETE_KEYS));
     dialectName = getString(DIALECT_NAME_CONFIG);
+    dbEncoding = getCharset(DBEncoding.valueOf(getString(DB_ENCODING).toUpperCase()));
 //    fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
@@ -694,6 +723,17 @@ public class JdbcSinkConfig extends AbstractConfig {
     }
     tableTypes = TableType.parse(getList(TABLE_TYPES_CONFIG));
 
+  }
+
+  private Charset getCharset(DBEncoding encoding) {
+    switch (encoding) {
+      case UTF8:
+        return StandardCharsets.UTF_8;
+      case UTF16:
+        return StandardCharsets.UTF_16;
+    }
+    throw new ConfigException(
+            String.format("DB encoding %s is not recognized. Legal values are %s", encoding, Arrays.toString(DBEncoding.values())));
   }
 
   private String getPasswordValue(String key) {
