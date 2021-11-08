@@ -30,7 +30,6 @@ import org.apache.kafka.connect.sink.SinkRecord;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.Date;
 import java.util.Optional;
 import java.util.Set;
 
@@ -212,7 +211,7 @@ public class PreparedStatementBinder implements StatementBinder {
 
   protected void bindField(int index, Schema schema, Object value, String fieldName)
       throws SQLException {
-    ColumnDefinition colDef = tabDef == null ? null : tabDef.definitionForColumn(fieldName.toUpperCase());
+    ColumnDefinition colDef = tabDef == null ? null : tabDef.definitionForColumn(fieldName);
     dialect.bindField(statement, index, schema, value, colDef);
   }
 }

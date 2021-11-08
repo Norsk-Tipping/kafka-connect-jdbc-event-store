@@ -2800,6 +2800,8 @@ public class JdbcDbWriterTest {
     props.put("value.converter.payload.field.name", "event");
     props.put("connection.user", "postgres");
     props.put("connection.password", "password123");
+    props.put("quote.sql.identifiers", "never");
+
     props.put("zonemapattributes", "intkey");
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
@@ -2848,7 +2850,7 @@ public class JdbcDbWriterTest {
     writer = newWriter(props);
     for (int j=0; j< 100; j++) {
       ArrayList<SinkRecord> list = new ArrayList<>();
-      for (int i = 0; i < 10000; i++) {
+      for (int i = 0; i < 10; i++) {
         SchemaAndValue schemaAndValue = converter.toConnectData(TOPIC, serializer.serialize(TOPIC, struct));
         final SinkRecord recordA = new SinkRecord(TOPIC, 0, null, null, schemaAndValue.schema(), schemaAndValue.value(), 0);
         //System.out.println(recordA);
