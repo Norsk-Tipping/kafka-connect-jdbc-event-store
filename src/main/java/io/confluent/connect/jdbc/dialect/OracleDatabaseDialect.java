@@ -275,7 +275,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       builder.append(";");
       builder.append(System.lineSeparator());
       builder.append("CREATE MATERIALIZED ZONEMAP ");
-      builder.appendColumnName(table.tableName() +"_zmap ", QuoteMethod.ALWAYS);
+      builder.appendColumnName(table.tableName() +"_zmap", QuoteMethod.ALWAYS);
       builder.append(" REFRESH FAST ON COMMIT ");
       builder.append("ON ");
       builder.append(table);
