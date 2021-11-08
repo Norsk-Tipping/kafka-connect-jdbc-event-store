@@ -151,9 +151,9 @@ public class BufferedRecords {
         }
       }
 
-      final String insertSql = record.valueSchema() != null ? getInsertSql() : null;
-      final String deleteSql = config.deleteEnabled ? getDeleteSql(fieldsMetadata.deleteKeyFieldNames) : null;
-      final String upsertDeleteSql = record.valueSchema() != null && config.insertMode == UPSERT ? getDeleteSql(fieldsMetadata.upsertKeyFieldNames) : null;
+      final String insertSql = record.valueSchema() != null ? JdbcSinkConfig.ucase(getInsertSql()) : null;
+      final String deleteSql = config.deleteEnabled ? JdbcSinkConfig.ucase(getDeleteSql(fieldsMetadata.deleteKeyFieldNames)) : null;
+      final String upsertDeleteSql = record.valueSchema() != null && config.insertMode == UPSERT ? JdbcSinkConfig.ucase(getDeleteSql(fieldsMetadata.upsertKeyFieldNames)) : null;
 
       log.debug(
           "{} sql: {} deleteSql: {} upsertDeleteSql: {} meta: {}",

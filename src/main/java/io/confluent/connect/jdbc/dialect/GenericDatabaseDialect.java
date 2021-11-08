@@ -151,9 +151,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       timeZone = ((JdbcSinkConfig) config).timeZone;
       try {
         if (config.getString("value.converter.payload.field.name") != null && !config.getString("value.converter.payload.field.name").isEmpty()) {
-          converterPayloadFieldName = config.getString("value.converter.payload.field.name");
+          converterPayloadFieldName = config.getBoolean("uppercase") ? config.getString("value.converter.payload.field.name").toUpperCase():
+          config.getString("value.converter.payload.field.name").toLowerCase();
         } else {
-          converterPayloadFieldName = "event";
+          converterPayloadFieldName = config.getBoolean("uppercase") ? "event".toUpperCase():
+          "event".toLowerCase();
         }
       } catch (ConfigException e){
         log.debug("No payload field name configured for converter, 'event' is used as payload field name");

@@ -170,9 +170,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       for (int i=0; i<partitions(); i++) {
         builder.append(System.lineSeparator());
         builder.append("CREATE TABLE ");
-        builder.append(table.tableName());
-        builder.append("_h");
-        builder.append(i);
+        builder.appendColumnName(table.tableName() + "_h" + i, QuoteMethod.ALWAYS);
         builder.append(" PARTITION OF ");
         builder.append(table);
         builder.append(" FOR VALUES WITH (modulus ");
@@ -190,18 +188,12 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           int finalI = i;
           zonemapAttributes().forEach(ca -> {
             builder.append(System.lineSeparator());
-            builder.append("CREATE INDEX brin_");
-            builder.append(table.tableName());
-            builder.append("_h");
-            builder.append(finalI);
-            builder.append("_");
-            builder.append(ca);
+            builder.append("CREATE INDEX ");
+            builder.appendColumnName("brin_" + table.tableName() + "_h" + finalI + "_" + ca, QuoteMethod.ALWAYS);
             builder.append(" ON ");
-            builder.append(table.tableName());
-            builder.append("_h");
-            builder.append(finalI);
+            builder.appendColumnName(table.tableName() + "_h" + finalI, QuoteMethod.ALWAYS);
             builder.append(" USING brin(");
-            builder.append(ca);
+            builder.appendColumnName(ca, QuoteMethod.ALWAYS);
             builder.append(")");
             if (finalI < partitions()) {builder.append(";");}
           });
@@ -209,14 +201,12 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       } else {
         zonemapAttributes().forEach(ca -> {
           builder.append(System.lineSeparator());
-          builder.append("CREATE INDEX brin_");
-          builder.append(table.tableName());
-          builder.append("_");
-          builder.append(ca);
+          builder.append("CREATE INDEX ");
+          builder.appendColumnName("brin_" + table.tableName() + "_" + ca, QuoteMethod.ALWAYS);
           builder.append(" ON ");
           builder.append(table);
           builder.append(" USING brin(");
-          builder.append(ca);
+          builder.appendColumnName(ca, QuoteMethod.ALWAYS);
           builder.append(")");
         });
       }
@@ -228,14 +218,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       if (!distributionAttributes().isEmpty()) {
         for (int i=0; i<partitions(); i++) {
             builder.append(System.lineSeparator());
-            builder.append("CREATE INDEX bloom_");
-            builder.append(table.tableName());
-            builder.append("_h");
-            builder.append(i);
+            builder.append("CREATE INDEX ");
+            builder.appendColumnName("bloom_" + table.tableName() + "_h" + i, QuoteMethod.ALWAYS);
             builder.append(" ON ");
-            builder.append(table.tableName());
-            builder.append("_h");
-            builder.append(i);
+            builder.appendColumnName(table.tableName() + "_h" + i, QuoteMethod.ALWAYS);
             builder.append(" USING bloom(");
             builder.appendList()
                     .delimitedBy(",")
@@ -246,10 +232,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         }
       } else {
         builder.append(System.lineSeparator());
-        builder.append("CREATE INDEX bloom_");
-        builder.append(table.tableName());
+        builder.appendColumnName("CREATE INDEX bloom_" + table.tableName(), QuoteMethod.ALWAYS);
         builder.append(" ON ");
-        builder.append(table.tableName());
+        builder.append(table);
         builder.append(" USING bloom(");
         builder.appendList()
                 .delimitedBy(",")

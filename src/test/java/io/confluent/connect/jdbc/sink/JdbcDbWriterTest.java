@@ -2792,19 +2792,18 @@ public class JdbcDbWriterTest {
   }
 
   @Test
-  public void autoCreateWithAutoEvolvePerformance() throws SQLException, RestClientException, IOException {
+  public void autoCreateWithAutoEvolveUppercase() throws SQLException, RestClientException, IOException {
     Map<String, String> props = new HashMap<>();
     props.put("connection.url", postgresqlHelper.postgreSQL());
     props.put("auto.create", "true");
     props.put("auto.evolve", "true");
     props.put("value.converter.payload.field.name", "event");
+    props.put("uppercase", "true");
     props.put("connection.user", "postgres");
     props.put("connection.password", "password123");
-    props.put("quote.sql.identifiers", "never");
-
-    props.put("zonemapattributes", "intkey");
-    props.put("distributionattributes", "stringkey");
-    props.put("clusteredattributes", "stringkey, intkey");
+    props.put("zonemapattributes", "INTKEY");
+    props.put("distributionattributes", "STRINGKEY");
+    props.put("clusteredattributes", "STRINGKEY, INTKEY");
     props.put("partitions", "5");
     props.put("batch.size", "10000");
     Map<String, String> map = Stream.of(
@@ -2814,6 +2813,98 @@ public class JdbcDbWriterTest {
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.int32", "intkey"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.string", "stringkey"),
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.PAYLOAD_FIELD_NAME, "event"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "true"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.INPUT_FORMAT, "avro")
+    )
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    converter.configure(map, false);
+    org.apache.avro.Schema avroSchema = org.apache.avro.SchemaBuilder.record("ComplexSchemaName").fields()
+            .nullableInt("int8", 2)
+            .requiredInt("int16")
+            .requiredInt("int32")
+            .requiredInt("int64")
+            .requiredFloat("float32")
+            .requiredBoolean("boolean")
+            .optionalString("string")
+            .requiredBytes("bytes")
+            .name("array").type().array().items().type(org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING)).noDefault()
+            .name("map").type().map().values().type(org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT)).noDefault()
+            .endRecord()
+            ;
+
+    GenericData.Record struct = new GenericRecordBuilder(avroSchema)
+            .set("int8", 12)
+            .set("int16", 12)
+            .set("int32", 12)
+            .set("int64", 12L)
+            .set("float32", 12.2f)
+            .set("boolean", true)
+            .set("string", "id45634#¤§`´åæøØÆÅ")
+            .set("bytes", ByteBuffer.wrap("foo".getBytes()))
+            .set("array", Arrays.asList("a", "b", "c"))
+            .set("map", Collections.singletonMap("field", 1)).build();
+
+    schemaRegistry.register(TOPIC+ "-value", avroSchema);
+    String expected = struct.toString();
+    tablesUsed.add("\"" + TOPIC.toUpperCase() + "\"");
+
+    writer = newWriter(props);
+    for (int j=0; j< 100; j++) {
+      ArrayList<SinkRecord> list = new ArrayList<>();
+      for (int i = 0; i < 10; i++) {
+        SchemaAndValue schemaAndValue = converter.toConnectData(TOPIC, serializer.serialize(TOPIC, struct));
+        final SinkRecord recordA = new SinkRecord(TOPIC, 0, null, null, schemaAndValue.schema(), schemaAndValue.value(), 0);
+        //System.out.println(recordA);
+        list.add(recordA);
+      }
+      writer.write(list);
+    }
+
+    assertEquals(
+            100000,
+            postgresqlHelper.select(
+                    "SELECT * FROM " + "\"" + TOPIC.toUpperCase() + "\"",
+                    new PostgresqlHelper.ResultSetReadCallback() {
+                      @Override
+                      public void read(ResultSet rs) throws SQLException {
+                        assertEquals("12", rs.getString("intkey"));
+                        assertEquals("id45634#¤§`´åæøØÆÅ", rs.getString("stringkey"));
+                        JSONObject expectedJsonObject = new JSONObject(expected);
+                        JSONObject resultJsonObject = new JSONObject(rs.getString("event"));
+                        expectedJsonObject.keys().forEachRemaining(k -> assertEquals(resultJsonObject.get(k).toString(), expectedJsonObject.get(k).toString()));
+                      }
+                    }
+            )
+    );
+    TableId tableId = new TableId(null, null, TOPIC);
+    TableDefinition refreshedMetadata = dialect.describeTable(postgresqlHelper.connection, tableId);
+    System.out.println(refreshedMetadata);
+  }
+
+  @Test
+  public void autoCreateWithAutoEvolveLowercase() throws SQLException, RestClientException, IOException {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", postgresqlHelper.postgreSQL());
+    props.put("auto.create", "true");
+    props.put("auto.evolve", "true");
+    props.put("value.converter.payload.field.name", "event");
+    props.put("uppercase", "false");
+    props.put("quote.sql.identifiers", "always");
+    props.put("connection.user", "postgres");
+    props.put("connection.password", "password123");
+    props.put("zonemapattributes", "INTKEY");
+    props.put("distributionattributes", "STRINGKEY");
+    props.put("clusteredattributes", "STRINGKEY, INTKEY");
+    props.put("partitions", "5");
+    props.put("batch.size", "10000");
+    Map<String, String> map = Stream.of(
+            new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName"),
+            new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.int32", "intkey"),
+            new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.string", "stringkey"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.PAYLOAD_FIELD_NAME, "event"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.INPUT_FORMAT, "avro")
     )
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -2862,7 +2953,7 @@ public class JdbcDbWriterTest {
     assertEquals(
             100000,
             postgresqlHelper.select(
-                    "SELECT * FROM " + TOPIC,
+                    "SELECT * FROM " + "\"" + TOPIC.toLowerCase() + "\"",
                     new PostgresqlHelper.ResultSetReadCallback() {
                       @Override
                       public void read(ResultSet rs) throws SQLException {

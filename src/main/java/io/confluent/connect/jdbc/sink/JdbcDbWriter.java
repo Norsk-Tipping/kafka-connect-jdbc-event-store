@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collection;
+import java.util.Locale;
 
 public class JdbcDbWriter {
   private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
@@ -87,7 +88,8 @@ public class JdbcDbWriter {
   }
 
   TableId destinationTable(String topic) {
-    final String tableName = config.tableNameFormat.replace("${topic}", topic);
+    final String tableName = config.uppercase ? config.tableNameFormat.replace("${topic}", topic).toUpperCase():
+            config.tableNameFormat.replace("${topic}", topic).toLowerCase(Locale.ROOT);
     if (tableName.isEmpty()) {
       throw new ConnectException(String.format(
           "Destination table name for topic '%s' is empty using the format string '%s'",

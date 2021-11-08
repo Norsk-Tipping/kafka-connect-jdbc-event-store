@@ -33,7 +33,6 @@ import org.apache.kafka.connect.errors.ConnectException;
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.Collection;
 import java.util.Collections;
@@ -258,9 +257,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       for (int i=0; i<partitions(); i++) {
         builder.append(System.lineSeparator());
         builder.append("PARTITION ");
-        builder.append(table.tableName());
-        builder.append("_h");
-        builder.append(i);
+        builder.appendColumnName(table.tableName() + "_h" + i, QuoteMethod.ALWAYS);
         if (i < partitions()-1) {builder.append(",");}
       }
       builder.append(")");
@@ -278,7 +275,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       builder.append(";");
       builder.append(System.lineSeparator());
       builder.append("CREATE MATERIALIZED ZONEMAP ");
-      builder.append(table.tableName() +"_zmap ");
+      builder.appendColumnName(table.tableName() +"_zmap ", QuoteMethod.ALWAYS);
       builder.append(" REFRESH FAST ON COMMIT ");
       builder.append("ON ");
       builder.append(table);

@@ -51,11 +51,11 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   public static final List<String> DEFAULT_KAFKA_PK_NAMES = Collections.unmodifiableList(
       Arrays.asList(
-          "connect_topic",
-          "connect_partition",
-          "connect_offset",
-          "connect_timestamp",
-          "connect_timestamp_type"
+          ucase("connect_topic"),
+              ucase("connect_partition"),
+                      ucase("connect_offset"),
+                              ucase("connect_timestamp"),
+                                      ucase("connect_timestamp_type")
       )
   );
 
@@ -266,6 +266,14 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static final String SCHEMA_NAMES = "value.converter.schema.names";
   private static final String SCHEMA_NAMES_DOC =
           "Specify the field name that will be used to contain the record value in JSON ";
+
+  //Added flag to indicate uppercase or lowercase
+  public static final String UPPERCASE = "uppercase";
+  private static final String UPPERCASE_DEFAULT = "false";
+  private static final String UPPERCASE_DOC =
+          "Whether to automatically apply uppercase to columns is enabled."
+                  + " When set to false lowercase will be applied.";
+  private static final String UPPERCASE_DISPLAY = "Uppercase fields";
 
   public static final String ZONEMAPATTRIBUTES = "zonemapattributes";
   private static final String ZONEMAPATTRIBUTES_DEFAULT = "";
@@ -635,7 +643,17 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Type.LIST,
             new ArrayList<>(),
             ConfigDef.Importance.HIGH,
-            SCHEMA_NAMES_DOC)
+            SCHEMA_NAMES_DOC
+          ).define(
+            UPPERCASE,
+            ConfigDef.Type.BOOLEAN,
+            UPPERCASE_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            UPPERCASE_DOC, WRITES_GROUP,
+            11,
+            ConfigDef.Width.SHORT,
+            UPPERCASE_DISPLAY
+          )
           ;
 
   public final String connectorName;
@@ -668,6 +686,8 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final List<String> distributionattributes;
   public final List<String> zonemapattributes;
   public final int partitions;
+  //UCASE: uppercase boolean
+  public static boolean uppercase;
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
@@ -700,6 +720,8 @@ public class JdbcSinkConfig extends AbstractConfig {
     distributionattributes = getList(DISTRIBUTIONATTRIBUTES);
     zonemapattributes = getList(ZONEMAPATTRIBUTES);
     partitions = getInt(PARTITIONS);
+    //uppercase or lowercase for columns and table names boolean
+    uppercase = getBoolean(UPPERCASE);
 
     Map<String, ArrayList<Object>> schemaValues = schemaNames.stream().map(schemaName ->
             new AbstractMap.SimpleEntry<>(
@@ -724,6 +746,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     tableTypes = TableType.parse(getList(TABLE_TYPES_CONFIG));
 
   }
+
+  public static String ucase(String string) {
+    return uppercase ? string.toUpperCase() : string.toLowerCase();
+  }
+
 
   private Charset getCharset(DBEncoding encoding) {
     switch (encoding) {
