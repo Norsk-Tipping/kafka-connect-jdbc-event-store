@@ -691,6 +691,7 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
+    uppercase = getBoolean(UPPERCASE);
     connectorName = ConfigUtils.connectorName(props);
     connectionUrl = getString(CONNECTION_URL);
     connectionUser = getString(CONNECTION_USER);
@@ -716,12 +717,12 @@ public class JdbcSinkConfig extends AbstractConfig {
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
     payloadFieldName = getString(PAYLOAD_FIELD_NAME).trim();
     schemaNames = getList(SCHEMA_NAMES);
-    clusteredattributes = getList(CLUSTEREDATTRIBUTES);
-    distributionattributes = getList(DISTRIBUTIONATTRIBUTES);
-    zonemapattributes = getList(ZONEMAPATTRIBUTES);
+    clusteredattributes = getList(CLUSTEREDATTRIBUTES).stream().map(ca -> uppercase ? ca.toUpperCase() : ca.toLowerCase()).collect(Collectors.toList());
+    distributionattributes = getList(DISTRIBUTIONATTRIBUTES).stream().map(da -> uppercase ? da.toUpperCase() : da.toLowerCase()).collect(Collectors.toList());
+    zonemapattributes = getList(ZONEMAPATTRIBUTES).stream().map(zm -> uppercase ? zm.toUpperCase() : zm.toLowerCase()).collect(Collectors.toList());
     partitions = getInt(PARTITIONS);
     //uppercase or lowercase for columns and table names boolean
-    uppercase = getBoolean(UPPERCASE);
+
 
     Map<String, ArrayList<Object>> schemaValues = schemaNames.stream().map(schemaName ->
             new AbstractMap.SimpleEntry<>(
