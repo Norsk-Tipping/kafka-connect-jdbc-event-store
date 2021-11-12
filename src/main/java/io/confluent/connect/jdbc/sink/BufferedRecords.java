@@ -145,6 +145,8 @@ public class BufferedRecords {
           tableId,
           fieldsMetadata
       );
+      dbDialect.setRowlength(fieldsMetadata.allFields.size());
+
       if (isNull(record.value())  && isNull(deletePreparedStatement)) {
         if (!cora) {
           return flushed;

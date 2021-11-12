@@ -102,6 +102,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private final List<String> zonemapAttributes;
   private final Integer partitions;
 
+  protected int rowlength;
+
   /**
    * Create a new dialect instance with the given connector configuration.
    *
@@ -1378,6 +1380,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         "%s (%s) type doesn't have a mapping to the SQL database column type", f.schemaName(),
         f.schemaType()
     ));
+  }
+
+  public void setRowlength(int rowlength) {
+    this.rowlength = rowlength;
   }
 
   /**

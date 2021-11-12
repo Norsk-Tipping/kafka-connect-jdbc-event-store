@@ -2849,9 +2849,9 @@ public class JdbcDbWriterTest {
     tablesUsed.add("\"" + TOPIC.toUpperCase() + "\"");
 
     writer = newWriter(props);
-    for (int j=0; j< 100; j++) {
+    for (int j=0; j< 20; j++) {
       ArrayList<SinkRecord> list = new ArrayList<>();
-      for (int i = 0; i < 10; i++) {
+      for (int i = 0; i < 50000; i++) {
         SchemaAndValue schemaAndValue = converter.toConnectData(TOPIC, serializer.serialize(TOPIC, struct));
         final SinkRecord recordA = new SinkRecord(TOPIC, 0, null, null, schemaAndValue.schema(), schemaAndValue.value(), 0);
         //System.out.println(recordA);
@@ -2861,18 +2861,13 @@ public class JdbcDbWriterTest {
     }
 
     assertEquals(
-            100000,
+            1,
             postgresqlHelper.select(
-                    "SELECT * FROM " + "\"" + TOPIC.toUpperCase() + "\"",
+                    "SELECT count(*) FROM " + TOPIC.toUpperCase() ,
                     new PostgresqlHelper.ResultSetReadCallback() {
                       @Override
                       public void read(ResultSet rs) throws SQLException {
-                        assertEquals("12", rs.getString("intkey"));
-                        assertEquals("id45634#¤§`´åæøØÆÅ", rs.getString("stringkey"));
-                        JSONObject expectedJsonObject = new JSONObject(expected);
-                        JSONObject resultJsonObject = new JSONObject(rs.getString("event"));
-                        expectedJsonObject.keys().forEachRemaining(k -> assertEquals(resultJsonObject.get(k).toString(), expectedJsonObject.get(k).toString()));
-                      }
+                        assertEquals(1000000, rs.getInt(1));            }
                     }
             )
     );
@@ -2896,7 +2891,7 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "STRINGKEY");
     props.put("clusteredattributes", "STRINGKEY, INTKEY");
     props.put("partitions", "5");
-    props.put("batch.size", "10000");
+    props.put("batch.size", "50000");
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
 
@@ -2912,7 +2907,7 @@ public class JdbcDbWriterTest {
     org.apache.avro.Schema avroSchema = org.apache.avro.SchemaBuilder.record("ComplexSchemaName").fields()
             .nullableInt("int8", 2)
             .requiredInt("int16")
-            .requiredInt("int32")
+            .optionalInt("int32")
             .requiredInt("int64")
             .requiredFloat("float32")
             .requiredBoolean("boolean")
@@ -2939,9 +2934,9 @@ public class JdbcDbWriterTest {
     String expected = struct.toString();
 
     writer = newWriter(props);
-    for (int j=0; j< 100; j++) {
+    for (int j=0; j< 20; j++) {
       ArrayList<SinkRecord> list = new ArrayList<>();
-      for (int i = 0; i < 10; i++) {
+      for (int i = 0; i < 50000; i++) {
         SchemaAndValue schemaAndValue = converter.toConnectData(TOPIC, serializer.serialize(TOPIC, struct));
         final SinkRecord recordA = new SinkRecord(TOPIC, 0, null, null, schemaAndValue.schema(), schemaAndValue.value(), 0);
         //System.out.println(recordA);
@@ -2951,21 +2946,17 @@ public class JdbcDbWriterTest {
     }
 
     assertEquals(
-            100000,
+            1,
             postgresqlHelper.select(
-                    "SELECT * FROM " + "\"" + TOPIC.toLowerCase() + "\"",
+                    "SELECT count(*) FROM " + TOPIC ,
                     new PostgresqlHelper.ResultSetReadCallback() {
                       @Override
                       public void read(ResultSet rs) throws SQLException {
-                        assertEquals("12", rs.getString("intkey"));
-                        assertEquals("id45634#¤§`´åæøØÆÅ", rs.getString("stringkey"));
-                        JSONObject expectedJsonObject = new JSONObject(expected);
-                        JSONObject resultJsonObject = new JSONObject(rs.getString("event"));
-                        expectedJsonObject.keys().forEachRemaining(k -> assertEquals(resultJsonObject.get(k).toString(), expectedJsonObject.get(k).toString()));
-                      }
+                        assertEquals(1000000, rs.getInt(1));            }
                     }
             )
     );
+
     TableId tableId = new TableId(null, null, TOPIC);
     TableDefinition refreshedMetadata = dialect.describeTable(postgresqlHelper.connection, tableId);
     System.out.println(refreshedMetadata);

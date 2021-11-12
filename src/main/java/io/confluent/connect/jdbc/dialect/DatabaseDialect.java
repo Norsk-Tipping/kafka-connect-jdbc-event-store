@@ -501,6 +501,7 @@ public interface DatabaseDialect extends ConnectionProvider {
       Object value
   ) throws SQLException;
 
+  void setRowlength(int rowlength);
 
   /** Method that binds a value with the given schema at the specified variable within a prepared
    * statement. By default, the behavior is the same as the other overloaded method with the extra
