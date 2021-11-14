@@ -269,7 +269,7 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   //Added flag to indicate uppercase or lowercase
   public static final String UPPERCASE = "uppercase";
-  private static final String UPPERCASE_DEFAULT = "false";
+  private static final String UPPERCASE_DEFAULT = "true";
   private static final String UPPERCASE_DOC =
           "Whether to automatically apply uppercase to columns is enabled."
                   + " When set to false lowercase will be applied.";
