@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
 import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
@@ -37,6 +38,7 @@ import java.sql.*;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -98,6 +100,12 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     );
   }
 
+
+  @Override
+  protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
+    super.initializePreparedStatement(stmt);
+  }
+
   @Override
   public void bindField(
       PreparedStatement statement,
@@ -135,7 +143,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         statement.setBytes(index, ((String)value).getBytes(super.dbEncoding));
         return true;
       } else if (colDef.type() == Types.CLOB) {
-        statement.setString(index, ((String) value));
+        statement.setBytes(index, ((String) value).getBytes(super.dbEncoding));
         return true;
       } else if (colDef.type() == Types.NCLOB) {
         statement.setNCharacterStream(index, new StringReader((String) value));
@@ -244,6 +252,19 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     builder.appendColumnName(converterPayloadFieldName());
     builder.append(" IS JSON)");*/
     builder.append(")");
+    builder.append(" CACHE NOLOGGING ");
+    builder.append(System.lineSeparator());
+    builder.append(" LOB (");
+    builder.appendList()
+            .delimitedBy(",")
+            .transformedBy(ExpressionBuilder.quote())
+            .of(fields.stream().filter(f -> {
+              String t = getSqlType(f);
+              return t.equals("CLOB") || t.equals("BLOB");
+            }).map(f -> f.name()).collect(Collectors.toList()));
+    builder.append(")");
+    builder.append(System.lineSeparator());
+    builder.append(" STORE AS ( ENABLE STORAGE IN ROW CACHE NOLOGGING ) ");
     builder.append(System.lineSeparator());
     if (!distributionAttributes().isEmpty()) {
       builder.append(System.lineSeparator());
@@ -261,6 +282,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         if (i < partitions()-1) {builder.append(",");}
       }
       builder.append(")");
+      builder.append(" PARALLEL ");
     }
     if (!clusteredAttributes().isEmpty()) {
       builder.append(System.lineSeparator());
@@ -288,6 +310,33 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     }
     builder.append(";");
     return builder.toString();
+  }
+
+  @Override
+  public String buildInsertStatement(
+          TableId table,
+          Collection<ColumnId> nonKeyColumns,
+          TableDefinition definition
+  ) {
+    if (((JdbcSinkConfig) this.config).insertMode == InsertMode.INSERT) {
+      ExpressionBuilder builder = expressionBuilder();
+      builder.append("INSERT ");
+      builder.append(" /*+ ENABLE_PARALLEL_DML */ ");
+      builder.append(" /*+ APPEND_VALUES PARALLEL NOLOGGING*/ ");
+      builder.append(" INTO ");
+      builder.append(table);
+      builder.append(" (");
+      builder.appendList()
+              .delimitedBy(",")
+              .transformedBy(ExpressionBuilder.columnNames())
+              .of(nonKeyColumns);
+      builder.append(") VALUES(");
+      builder.appendMultiple(",", "?", nonKeyColumns.size());
+      builder.append(")");
+      return builder.toString();
+    } else {
+      return super.buildInsertStatement(table, nonKeyColumns, definition);
+    }
   }
 
   @Override
