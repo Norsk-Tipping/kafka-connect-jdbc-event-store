@@ -23,6 +23,7 @@ import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.util.*;
+import oracle.jdbc.OracleConnection;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.*;
@@ -143,7 +144,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         statement.setBytes(index, ((String)value).getBytes(super.dbEncoding));
         return true;
       } else if (colDef.type() == Types.CLOB) {
-        statement.setBytes(index, ((String) value).getBytes(super.dbEncoding));
+        statement.setString(index, (String) value);
         return true;
       } else if (colDef.type() == Types.NCLOB) {
         statement.setNCharacterStream(index, new StringReader((String) value));
@@ -202,10 +203,10 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "NUMBER(1,0)";
       case STRING:
-        if (field.name() != null && field.name().equals(converterPayloadFieldName())) {
+        if (field.name() != null && JdbcSinkConfig.ucase(field.name()).equals(converterPayloadFieldName())) {
           return "BLOB";
         }
-        if (field.name() != null && clusteredAttributes().contains(field.name())) {
+        if (field.name() != null && clusteredAttributes().contains(JdbcSinkConfig.ucase(field.name()))) {
           return "VARCHAR2(100)";
         }
         return "CLOB";
@@ -252,7 +253,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     builder.appendColumnName(converterPayloadFieldName());
     builder.append(" IS JSON)");*/
     builder.append(")");
-    builder.append(" CACHE NOLOGGING ");
+    builder.append(" NOCACHE NOLOGGING ");
     builder.append(System.lineSeparator());
     builder.append(" LOB (");
     builder.appendList()
@@ -260,11 +261,11 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
             .transformedBy(ExpressionBuilder.quote())
             .of(fields.stream().filter(f -> {
               String t = getSqlType(f);
-              return t.equals("CLOB") || t.equals("BLOB");
+              return t.equals("BLOB") || t.equals("CLOB");
             }).map(f -> f.name()).collect(Collectors.toList()));
     builder.append(")");
     builder.append(System.lineSeparator());
-    builder.append(" STORE AS ( ENABLE STORAGE IN ROW CACHE NOLOGGING ) ");
+    builder.append(" STORE AS SECUREFILE (COMPRESS HIGH ENABLE STORAGE IN ROW NOCACHE NOLOGGING) ");
     builder.append(System.lineSeparator());
     if (!distributionAttributes().isEmpty()) {
       builder.append(System.lineSeparator());
@@ -282,7 +283,6 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         if (i < partitions()-1) {builder.append(",");}
       }
       builder.append(")");
-      builder.append(" PARALLEL ");
     }
     if (!clusteredAttributes().isEmpty()) {
       builder.append(System.lineSeparator());
@@ -322,7 +322,9 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       ExpressionBuilder builder = expressionBuilder();
       builder.append("INSERT ");
       builder.append(" /*+ ENABLE_PARALLEL_DML */ ");
-      builder.append(" /*+ APPEND_VALUES PARALLEL NOLOGGING*/ ");
+      builder.append(" /*+ APPEND_VALUES */ ");
+      builder.append(" /*+ NOCACHE NOLOGGING */ ");
+      builder.append(" /*+ PARALLEL 1 */ ");
       builder.append(" INTO ");
       builder.append(table);
       builder.append(" (");

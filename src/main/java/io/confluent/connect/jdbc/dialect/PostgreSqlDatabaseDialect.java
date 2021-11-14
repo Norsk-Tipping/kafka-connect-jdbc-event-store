@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.dialect;
 
 import au.com.bytecode.opencsv.CSVWriter;
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.util.*;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
@@ -38,6 +39,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.*;
 import java.util.*;
 
@@ -181,7 +183,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
-        if (field.name() != null && field.name().equals(converterPayloadFieldName())) {
+        if (field.name() != null && JdbcSinkConfig.ucase(field.name()).equals(converterPayloadFieldName())) {
           return "JSONB";
         }
         return "TEXT";
@@ -849,7 +851,7 @@ class BulkLoadPreparedStatement implements PreparedStatement {
       CSVWriter writer = null;
       InputStream is = null;
       try {
-        filewriter = new FileWriter("bulkload.csv", StandardCharsets.UTF_8, false);
+        filewriter = new FileWriter("bulkload.csv", false);
         writer = new CSVWriter(filewriter, '\t', '"', '\\', DEFAULT_LINE_END);
 
         try {
@@ -896,7 +898,7 @@ class BulkLoadPreparedStatement implements PreparedStatement {
           log.error(String.format("Could not close filewriter for path %s", "bulkload.csv"), e);
         }
         try {
-          Files.deleteIfExists(Path.of("bulkload.csv"));
+          Files.deleteIfExists(Paths.get("bulkload.csv"));
         } catch (IOException e) {
           log.error(String.format("Could not close filewriter for path %s", "bulkload.csv"), e);
         }

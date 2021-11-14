@@ -49,15 +49,14 @@ public class JdbcSinkConfig extends AbstractConfig {
     RECORD_VALUE;
   }*/
 
-  public static final List<String> DEFAULT_KAFKA_PK_NAMES = Collections.unmodifiableList(
+  public static List<String> DEFAULT_KAFKA_PK_NAMES =
       Arrays.asList(
-          ucase("connect_topic"),
-              ucase("connect_partition"),
-                      ucase("connect_offset"),
-                              ucase("connect_timestamp"),
-                                      ucase("connect_timestamp_type")
-      )
-  );
+          "connect_topic",
+              "connect_partition",
+                     "connect_offset",
+                              "connect_timestamp",
+                                      "connect_timestamp_type"
+      );
 
   public static final String COORDINATES_ENABLED = "coordinates.enabled";
   private static final String COORDINATES_ENABLED_DEFAULT = "false";
@@ -692,6 +691,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
     uppercase = getBoolean(UPPERCASE);
+
     connectorName = ConfigUtils.connectorName(props);
     connectionUrl = getString(CONNECTION_URL);
     connectionUser = getString(CONNECTION_USER);
@@ -722,6 +722,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     zonemapattributes = getList(ZONEMAPATTRIBUTES).stream().map(zm -> uppercase ? zm.toUpperCase() : zm.toLowerCase()).collect(Collectors.toList());
     partitions = getInt(PARTITIONS);
     //uppercase or lowercase for columns and table names boolean
+    DEFAULT_KAFKA_PK_NAMES = DEFAULT_KAFKA_PK_NAMES.stream().map(JdbcSinkConfig::ucase).collect(Collectors.toList());
 
 
     Map<String, ArrayList<Object>> schemaValues = schemaNames.stream().map(schemaName ->

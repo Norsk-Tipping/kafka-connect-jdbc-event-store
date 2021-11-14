@@ -133,9 +133,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       catalogPattern = JdbcSourceTaskConfig.CATALOG_PATTERN_DEFAULT;
       schemaPattern = JdbcSourceTaskConfig.SCHEMA_PATTERN_DEFAULT;
       tableTypes = sinkConfig.tableTypeNames();
-      quoteSqlIdentifiers = QuoteMethod.get(
-          config.getString(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
-      );
+      quoteSqlIdentifiers = QuoteMethod.ALWAYS;
+              //QuoteMethod.get(
+          //config.getString(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
+
+      //);
       dbEncoding = sinkConfig.dbEncoding;
     } else {
       catalogPattern = config.getString(JdbcSourceTaskConfig.CATALOG_PATTERN_CONFIG);
