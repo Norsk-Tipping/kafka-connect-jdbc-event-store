@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.dialect.BulkLoadPreparedStatement;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.dialect.PostgreSqlDatabaseDialect;
@@ -33,8 +34,11 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Matchers;
 import org.mockito.Mockito;
+import org.postgresql.copy.CopyManager;
+import org.postgresql.core.BaseConnection;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.sql.*;
 import java.util.*;
 
@@ -55,12 +59,16 @@ public class BufferedRecordsTest {
     props = new HashMap<>();
     props.put("name", "my-connector");
     props.put("connection.url", postgresqlHelper.postgreSQL());
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "postgres");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, "password123");
     props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
     // We don't manually create the table, so let the connector do it
     props.put("auto.create", true);
     // We use various schemas, so let the connector add missing columns
     props.put("auto.evolve", true);
     props.put("input.format", "json");
+    props.put("uppercase", "false");
+
   }
 
   @After
@@ -79,14 +87,15 @@ public class BufferedRecordsTest {
     final TableId tableId = new TableId(null, null, "dummy");
     final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, postgresqlHelper.connection);
 
-    final Schema schemaA = SchemaBuilder.struct()
+    final Schema schemaA = SchemaBuilder.struct().version(1)
         .field("event", Schema.STRING_SCHEMA)
+        .field("age", Schema.OPTIONAL_INT32_SCHEMA)
         .build();
     final Struct valueA = new Struct(schemaA)
         .put("event", "{\"key\":\"cuba\"}");
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
 
-    final Schema schemaB = SchemaBuilder.struct()
+    final Schema schemaB = SchemaBuilder.struct().version(2)
         .field("event", Schema.STRING_SCHEMA)
         .field("age", Schema.OPTIONAL_INT32_SCHEMA)
         .build();
@@ -182,8 +191,9 @@ public class BufferedRecordsTest {
 	    final Schema keySchemaA = SchemaBuilder.struct()
             .field("id", Schema.STRING_SCHEMA)
 	        .build();
-	    final Schema valueSchemaA = SchemaBuilder.struct()
+	    final Schema valueSchemaA = SchemaBuilder.struct().version(0)
             .field("id", Schema.STRING_SCHEMA)
+            .field("age", Schema.OPTIONAL_INT32_SCHEMA)
 	        .field("event", Schema.STRING_SCHEMA)
 	        .build();
 	    final Struct keyA = new Struct(keySchemaA)
@@ -195,11 +205,11 @@ public class BufferedRecordsTest {
 	    final SinkRecord recordADeleteWithSchema = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, null, 0);
 	    final SinkRecord recordADelete = new SinkRecord("dummy", 0, keySchemaA, keyA, null, null, 0);
 
-	    final Schema schemaB = SchemaBuilder.struct()
-	        .field("event", Schema.STRING_SCHEMA)
-	        .field("age", Schema.OPTIONAL_INT32_SCHEMA)
+	    final Schema schemaB = SchemaBuilder.struct().version(1)
             .field("id", Schema.STRING_SCHEMA)
-	        .build();
+            .field("age", Schema.OPTIONAL_INT32_SCHEMA)
+            .field("event", Schema.STRING_SCHEMA)
+            .build();
 	    final Struct valueB = new Struct(schemaB)
             .put("id", "1234L")
 	        .put("event", "{\"key\":\"cuba\"}")
@@ -244,9 +254,10 @@ public class BufferedRecordsTest {
     final Schema keySchemaA = SchemaBuilder.struct()
         .field("id", Schema.STRING_SCHEMA)
         .build();
-    final Schema valueSchemaA = SchemaBuilder.struct()
+    final Schema valueSchemaA = SchemaBuilder.struct().version(1)
         .field("id", Schema.STRING_SCHEMA)
         .field("event", Schema.STRING_SCHEMA)
+        .field("age", Schema.OPTIONAL_INT32_SCHEMA)
         .build();
     final Struct keyA = new Struct(keySchemaA)
         .put("id", "1234L");
@@ -256,7 +267,7 @@ public class BufferedRecordsTest {
     final SinkRecord recordA = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, valueA, 0);
     final SinkRecord recordADelete = new SinkRecord("dummy", 0, keySchemaA, keyA, null, null, 0);
 
-    final Schema schemaB = SchemaBuilder.struct()
+    final Schema schemaB = SchemaBuilder.struct().version(2)
         .field("id", Schema.STRING_SCHEMA)
         .field("event", Schema.STRING_SCHEMA)
         .field("age", Schema.OPTIONAL_INT32_SCHEMA)
@@ -303,9 +314,10 @@ public class BufferedRecordsTest {
 	    final Schema keySchemaA = SchemaBuilder.struct()
             .field("id", Schema.STRING_SCHEMA)
 	        .build();
-	    final Schema valueSchemaA = SchemaBuilder.struct()
+	    final Schema valueSchemaA = SchemaBuilder.struct().version(1)
             .field("id", Schema.STRING_SCHEMA)
 	        .field("event", Schema.STRING_SCHEMA)
+            .field("age", Schema.OPTIONAL_INT32_SCHEMA)
 	        .build();
 	    final Struct keyA = new Struct(keySchemaA)
 	        .put("id", "1234L");
@@ -315,7 +327,7 @@ public class BufferedRecordsTest {
 	    final SinkRecord recordA = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, valueA, 0);
 	    final SinkRecord recordADeleteWithSchema = new SinkRecord("dummy", 0, keySchemaA, keyA, valueSchemaA, null, 0);
 
-	    final Schema schemaB = SchemaBuilder.struct()
+	    final Schema schemaB = SchemaBuilder.struct().version(2)
             .field("id", Schema.STRING_SCHEMA)
 	        .field("event", Schema.STRING_SCHEMA)
 	        .field("age", Schema.OPTIONAL_INT32_SCHEMA)
@@ -461,7 +473,7 @@ public class BufferedRecordsTest {
   }
   
   @Test
-  public void testFlushSuccessNoInfo() throws SQLException {
+  public void testFlushSuccessNoInfo() throws SQLException, IOException {
     final String url = postgresqlHelper.postgreSQL();
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
@@ -485,10 +497,15 @@ public class BufferedRecordsTest {
         .thenReturn(true);
     when(dbStructureMock.tableDefinition(any(), any())).thenReturn(tabDefMock);
 
-    PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
+    PreparedStatement preparedStatementMock = mock(BulkLoadPreparedStatement.class);
     when(preparedStatementMock.executeBatch()).thenReturn(batchResponse);
 
     Connection connectionMock = mock(Connection.class);
+    BaseConnection baseConnectionMock = mock(BaseConnection.class);
+    when(connectionMock.unwrap(BaseConnection.class)).thenReturn(baseConnectionMock);
+    CopyManager copyManagerMock = mock(CopyManager.class);
+    when(copyManagerMock.copyIn(Matchers.anyString(), Matchers.any(InputStream.class))).thenReturn(2L);
+    when(baseConnectionMock.getCopyAPI()).thenReturn(copyManagerMock);
     when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
 
     final TableId tableId = new TableId(null, null, "dummy");
@@ -543,7 +560,7 @@ public class BufferedRecordsTest {
     Mockito.verify(
         connectionMock,
         Mockito.times(1)
-    ).prepareStatement(Matchers.eq("UPDATE \"dummy\" SET \"id\" = ?, \"event\" = ? WHERE \"id\" = ?"));
+    ).prepareStatement(Matchers.eq("update \"dummy\" set \"id\" = ?, \"event\" = ? where \"id\" = ?"));
 
   }
 

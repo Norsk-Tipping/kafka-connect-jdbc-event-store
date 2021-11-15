@@ -23,7 +23,6 @@ import org.apache.kafka.connect.data.Schema.Type;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
-import java.io.StringReader;
 import java.nio.ByteBuffer;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -50,7 +49,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   @Test
   public void bindFieldStringValue() throws SQLException {
     int index = ThreadLocalRandom.current().nextInt();
-    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setCharacterStream(eq(index), any(StringReader.class));
+    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(eq(index), any(String.class));
   }
 
   @Override
@@ -118,28 +117,33 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
   @Test
   public void shouldBuildCreateQueryStatement() {
-    String expected = "CREATE TABLE \"myTable\" ("+ System.lineSeparator() + "\"c1\" NUMBER(10,0) NOT NULL,"+ System.lineSeparator() +
-                      "\"c2\" NUMBER(19,0) NOT NULL," + System.lineSeparator() + "\"c3\" CLOB NOT NULL," + System.lineSeparator() +
-                      "\"c4\" CLOB NULL," + System.lineSeparator() + "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
-                      "\"c6\" DATE DEFAULT '00:00:00.000'," + System.lineSeparator() +
-                      "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
-                      "\"c8\" NUMBER(*,4) NULL," + System.lineSeparator() +
-                      "\"c9\" NUMBER(1,0) DEFAULT 1," + System.lineSeparator() +
-                      "\"event\" BLOB NOT NULL," + System.lineSeparator() +
-                      "CONSTRAINT myTable_ensure_json CHECK (\"event\" IS JSON))" + System.lineSeparator() +
-                      "PARTITION BY HASH (\"c1\")(" + System.lineSeparator() +
-                      "PARTITION myTable_h0," + System.lineSeparator() +
-                      "PARTITION myTable_h1," + System.lineSeparator() +
-                      "PARTITION myTable_h2," + System.lineSeparator() +
-                      "PARTITION myTable_h3," + System.lineSeparator() +
-                      "PARTITION myTable_h4," + System.lineSeparator() +
-                      "PARTITION myTable_h5," + System.lineSeparator() +
-                      "PARTITION myTable_h6," + System.lineSeparator() +
-                      "PARTITION myTable_h7," + System.lineSeparator() +
-                      "PARTITION myTable_h8," + System.lineSeparator() +
-                      "PARTITION myTable_h9)" + System.lineSeparator() +
-                      "CLUSTERING BY INTERLEAVED ORDER (\"c1\",\"c2\");" + System.lineSeparator() +
-                      "CREATE MATERIALIZED ZONEMAP myTable_zmap ON \"myTable\" (\"c6\",\"c7\");";
+    String expected = "CREATE TABLE \"myTable\" (" + System.lineSeparator() +
+            "\"c1\" NUMBER(10,0) NOT NULL," + System.lineSeparator() +
+            "\"c2\" NUMBER(19,0) NOT NULL," + System.lineSeparator() +
+            "\"c3\" CLOB NOT NULL," + System.lineSeparator() +
+            "\"c4\" CLOB NULL," + System.lineSeparator() +
+            "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+            "\"c6\" DATE DEFAULT '00:00:00.000'," + System.lineSeparator() +
+            "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+            "\"c8\" NUMBER(*,4) NULL," + System.lineSeparator() +
+            "\"c9\" NUMBER(1,0) DEFAULT 1," + System.lineSeparator() +
+            "\"event\" BLOB NOT NULL) NOCACHE NOLOGGING " + System.lineSeparator() +
+            " LOB (\"c3\",\"c4\",\"event\")" + System.lineSeparator() +
+            " STORE AS SECUREFILE (COMPRESS HIGH ENABLE STORAGE IN ROW NOCACHE NOLOGGING) " + System.lineSeparator() +
+            "" + System.lineSeparator() +
+            "PARTITION BY HASH (\"C1\")(" + System.lineSeparator() +
+            "PARTITION \"myTable_h0\"," + System.lineSeparator() +
+            "PARTITION \"myTable_h1\"," + System.lineSeparator() +
+            "PARTITION \"myTable_h2\"," + System.lineSeparator() +
+            "PARTITION \"myTable_h3\"," + System.lineSeparator() +
+            "PARTITION \"myTable_h4\"," + System.lineSeparator() +
+            "PARTITION \"myTable_h5\"," + System.lineSeparator() +
+            "PARTITION \"myTable_h6\"," + System.lineSeparator() +
+            "PARTITION \"myTable_h7\"," + System.lineSeparator() +
+            "PARTITION \"myTable_h8\"," + System.lineSeparator() +
+            "PARTITION \"myTable_h9\")" + System.lineSeparator() +
+            " CLUSTERING BY LINEAR ORDER (\"C1\",\"C2\");" + System.lineSeparator() +
+            "CREATE MATERIALIZED ZONEMAP \"myTable_zmap\" REFRESH FAST ON COMMIT ON \"myTable\" (\"C6\",\"C7\");";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
   }
@@ -168,17 +172,17 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
     assertStatements(
         new String[]{
-            "ALTER TABLE myTable ADD(" + System.lineSeparator() +
-            "c1 NUMBER(10,0) NOT NULL," + System.lineSeparator() +
-            "c2 NUMBER(19,0) NOT NULL," + System.lineSeparator() +
-            "c3 CLOB NOT NULL," + System.lineSeparator() +
-            "c4 CLOB NULL," + System.lineSeparator() +
-            "c5 DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
-            "c6 DATE DEFAULT '00:00:00.000'," + System.lineSeparator() +
-            "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
-            "c8 NUMBER(*,4) NULL," + System.lineSeparator() +
-            "c9 NUMBER(1,0) DEFAULT 1," + System.lineSeparator() +
-            "event BLOB NOT NULL)"
+            "ALTER TABLE \"myTable\" ADD(" + System.lineSeparator() +
+            "\"c1\" NUMBER(10,0) NOT NULL," + System.lineSeparator() +
+            "\"c2\" NUMBER(19,0) NOT NULL," + System.lineSeparator() +
+            "\"c3\" CLOB NOT NULL," + System.lineSeparator() +
+            "\"c4\" CLOB NULL," + System.lineSeparator() +
+            "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+            "\"c6\" DATE DEFAULT '00:00:00.000'," + System.lineSeparator() +
+            "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+            "\"c8\" NUMBER(*,4) NULL," + System.lineSeparator() +
+            "\"c9\" NUMBER(1,0) DEFAULT 1," + System.lineSeparator() +
+            "\"event\" BLOB NOT NULL)"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -291,7 +295,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     verify(stmtNvarchar, times(1)).setNString(index, value);
 
     dialect.bindField(stmtClob, index, schema, value, colDefClob);
-    verify(stmtClob, times(1)).setCharacterStream(eq(index), any(StringReader.class));
+    verify(stmtClob, times(1)).setString(eq(index), any(String.class));
   }
 
   @Test

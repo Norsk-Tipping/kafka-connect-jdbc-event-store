@@ -96,6 +96,7 @@ public class JdbcDbWriterTest {
     props.put("auto.evolve", "true");
     props.put("value.converter.payload.field.name", "event");
     props.put("connection.user", "postgres");
+    props.put("uppercase", "false");
     props.put("connection.password", "password123");
     props.put("zonemapattributes", "intkey");
     props.put("distributionattributes", "stringkey");
@@ -107,6 +108,8 @@ public class JdbcDbWriterTest {
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.int32", "intkey"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.string", "stringkey"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
+
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.PAYLOAD_FIELD_NAME, "event"),
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.INPUT_FORMAT, "avro")
     )
@@ -173,6 +176,7 @@ public class JdbcDbWriterTest {
     props.put("connection.url", postgresqlHelper.postgreSQL());
     props.put("auto.create", "true");
     props.put("auto.evolve", "true");
+    props.put("uppercase", "false");
     props.put("value.converter.payload.field.name", "event");
     props.put("connection.user", "postgres");
     props.put("connection.password", "password123");
@@ -185,6 +189,7 @@ public class JdbcDbWriterTest {
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("json.ComplexSchemaName.string", "true"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.int32", "intkey"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.string", "stringkey"),
@@ -264,6 +269,7 @@ public class JdbcDbWriterTest {
     props.put("zonemapattributes", "intkey");
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
+    props.put("uppercase", "false");
     props.put("partitions", "5");
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
@@ -273,6 +279,8 @@ public class JdbcDbWriterTest {
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.string", "stringkey"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.array", "arrayitem"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.map", "mapvalue"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
+
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.PAYLOAD_FIELD_NAME, "event"),
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.INPUT_FORMAT, "avro")
     )
@@ -352,11 +360,13 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
+    props.put("uppercase", "false");
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("json.ComplexSchemaName.string", "true"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.int32", "intkey"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.string", "stringkey"),
@@ -440,8 +450,10 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
+    props.put("uppercase", "false");
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.subrecord1.subrecord2.int32", "intkey"),
@@ -537,6 +549,7 @@ public class JdbcDbWriterTest {
     props.put("connection.url", postgresqlHelper.postgreSQL());
     props.put("auto.create", "true");
     props.put("auto.evolve", "true");
+    props.put("uppercase", "false");
     props.put("value.converter.payload.field.name", "event");
     props.put("connection.user", "postgres");
     props.put("connection.password", "password123");
@@ -546,6 +559,7 @@ public class JdbcDbWriterTest {
     props.put("partitions", "5");
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("json.ComplexSchemaName.subrecord1.subrecord2.int32", "true"),
@@ -655,8 +669,10 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
+    props.put("uppercase", "false");
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName, SimpleSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.subrecord1.subrecord2.int32", "intkey"),
@@ -691,8 +707,10 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
+    props.put("uppercase", "false");
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName, SimpleSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.subrecord1.subrecord2.int32", "intkey"),
@@ -840,6 +858,7 @@ public class JdbcDbWriterTest {
     props.put("connection.user", "postgres");
     props.put("connection.password", "password123");
     props.put("zonemapattributes", "intkey");
+    props.put("uppercase", "false");
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
@@ -859,6 +878,7 @@ public class JdbcDbWriterTest {
     ;
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName, SimpleSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("json.ComplexSchemaName.subrecord1.subrecord2.int32", "true"),
@@ -1005,9 +1025,11 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
+    props.put("uppercase", "false");
 
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName, SimpleSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.subrecord1.subrecord2.int32", "intkey"),
@@ -1225,6 +1247,7 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
+    props.put("uppercase", "false");
 
 
     Map<String, String> map = Stream.of(
@@ -1238,6 +1261,7 @@ public class JdbcDbWriterTest {
             new AbstractMap.SimpleImmutableEntry<>("SimpleSchemaName.int", "intkey"),
             new AbstractMap.SimpleImmutableEntry<>("SimpleSchemaName.stringy", "stringkey"),
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.PAYLOAD_FIELD_NAME, "event"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.INPUT_FORMAT, "avro"),
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.ALLOWNONINDEXED, "true"),
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.VALUE_SUBJECT_NAME_STRATEGY, TopicRecordNameStrategy.class.getName())
@@ -1379,10 +1403,11 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
-
+    props.put("uppercase", "false");
 
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName, SimpleSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.subrecord1.subrecord2.int32", "intkey2"),
@@ -1561,10 +1586,11 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
-
+    props.put("uppercase", "false");
 
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName, SimpleSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.subrecord1.subrecord2.int32", "intkey"),
@@ -1760,10 +1786,11 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
-
+    props.put("uppercase", "false");
 
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName, SimpleSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.subrecord1.subrecord2.int32", "intkey"),
@@ -1964,7 +1991,7 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
-
+    props.put("uppercase", "false");
 
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
@@ -1977,6 +2004,8 @@ public class JdbcDbWriterTest {
             new AbstractMap.SimpleImmutableEntry<>("SimpleSchemaName.int", "intkey"),
             new AbstractMap.SimpleImmutableEntry<>("SimpleSchemaName.stringy", "stringkey"),
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.PAYLOAD_FIELD_NAME, "event"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
+
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.INPUT_FORMAT, "avro"),
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.ALLOWNONINDEXED, "true"),
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.VALUE_SUBJECT_NAME_STRATEGY, TopicRecordNameStrategy.class.getName())
@@ -2170,6 +2199,7 @@ public class JdbcDbWriterTest {
     props.put("connection.user", "postgres");
     props.put("connection.password", "password123");
     props.put("zonemapattributes", "intkey");
+    props.put("uppercase", "false");
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
@@ -2181,6 +2211,8 @@ public class JdbcDbWriterTest {
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName, SimpleSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.subrecord1.subrecord2.int32", "intkey"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.string", "stringkey"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
+
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.subrecord1.array", "arrayitem"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.map", "mapvalue"),
             new AbstractMap.SimpleImmutableEntry<>("SimpleSchemaName.int", "intkey"),
@@ -2529,9 +2561,10 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
-
+    props.put("uppercase", "false");
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName, SimpleSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.subrecord1.subrecord2.int32", "intkey"),
@@ -2572,10 +2605,12 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
+    props.put("uppercase", "false");
 
 
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName, SimpleSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.subrecord1.subrecord2.int32", "intkey"),
@@ -2724,8 +2759,10 @@ public class JdbcDbWriterTest {
     props.put("distributionattributes", "stringkey");
     props.put("clusteredattributes", "stringkey, intkey");
     props.put("partitions", "5");
+    props.put("uppercase", "false");
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
+            new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.UPPERCASE, "false"),
 
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "ComplexSchemaName"),
             new AbstractMap.SimpleImmutableEntry<>("ComplexSchemaName.int32", "intkey"),
@@ -2863,7 +2900,7 @@ public class JdbcDbWriterTest {
     assertEquals(
             1,
             postgresqlHelper.select(
-                    "SELECT count(*) FROM " + TOPIC.toUpperCase() ,
+                    "SELECT count(*) FROM " + "\"" + TOPIC.toUpperCase() + "\"",
                     new PostgresqlHelper.ResultSetReadCallback() {
                       @Override
                       public void read(ResultSet rs) throws SQLException {

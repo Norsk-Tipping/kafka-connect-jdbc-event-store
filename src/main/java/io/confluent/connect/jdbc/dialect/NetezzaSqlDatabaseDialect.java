@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.util.*;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
@@ -133,7 +134,7 @@ public class NetezzaSqlDatabaseDialect extends GenericDatabaseDialect {
             case BOOLEAN:
                 return "BOOLEAN";
             case STRING:
-                if (field.name() != null && field.name().equals(converterPayloadFieldName())) {
+                if (field.name() != null && JdbcSinkConfig.ucase(field.name()).equals(converterPayloadFieldName())) {
                     return "JSONB";
                 }
                 return "VARCHAR(250)";

@@ -35,6 +35,7 @@ public class NetezzaSqlDatabaseDialectTest extends BaseDialectTest<NetezzaSqlDat
   protected NetezzaSqlDatabaseDialect createDialect() {
     return new NetezzaSqlDatabaseDialect(sinkConfigWithUrl("jdbc:netezza://something",
             JdbcSinkConfig.DISTRIBUTIONATTRIBUTES, "c1",
+            JdbcSinkConfig.PAYLOAD_FIELD_NAME, "event",
             JdbcSinkConfig.CLUSTEREDATTRIBUTES, "c1, c2"));
   }
 
@@ -107,8 +108,8 @@ public class NetezzaSqlDatabaseDialectTest extends BaseDialectTest<NetezzaSqlDat
                 "\"c9\" BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
                 "\"event\" JSONB NOT NULL)" + System.lineSeparator() +
                 System.lineSeparator() +
-                "DISTRIBUTE ON (\"c1\")" + System.lineSeparator() +
-                "ORGANIZE ON (\"c1\",\"c2\");",
+                "DISTRIBUTE ON (\"C1\")" + System.lineSeparator() +
+                "ORGANIZE ON (\"C1\",\"C2\");",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
 
@@ -116,20 +117,20 @@ public class NetezzaSqlDatabaseDialectTest extends BaseDialectTest<NetezzaSqlDat
     dialect = createDialect();
 
     assertEquals(
-            "CREATE TABLE myTable (" + System.lineSeparator() +
-                    "c1 INT NOT NULL," + System.lineSeparator() +
-                    "c2 BIGINT NOT NULL," + System.lineSeparator() +
-                    "c3 VARCHAR(250) NOT NULL," + System.lineSeparator() +
-                    "c4 VARCHAR(250) NULL," + System.lineSeparator() +
-                    "c5 DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
-                    "c6 TIME DEFAULT '00:00:00.000'," + System.lineSeparator() +
-                    "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
-                    "c8 DECIMAL NULL," + System.lineSeparator() +
-                    "c9 BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
-                    "event JSONB NOT NULL)" + System.lineSeparator() +
+            "CREATE TABLE \"myTable\" (" + System.lineSeparator() +
+                    "\"c1\" INT NOT NULL," + System.lineSeparator() +
+                    "\"c2\" BIGINT NOT NULL," + System.lineSeparator() +
+                    "\"c3\" VARCHAR(250) NOT NULL," + System.lineSeparator() +
+                    "\"c4\" VARCHAR(250) NULL," + System.lineSeparator() +
+                    "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+                    "\"c6\" TIME DEFAULT '00:00:00.000'," + System.lineSeparator() +
+                    "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+                    "\"c8\" DECIMAL NULL," + System.lineSeparator() +
+                    "\"c9\" BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
+                    "\"event\" JSONB NOT NULL)" + System.lineSeparator() +
                     System.lineSeparator() +
-                    "DISTRIBUTE ON (c1)" + System.lineSeparator() +
-                    "ORGANIZE ON (c1,c2);",
+                    "DISTRIBUTE ON (\"C1\")" + System.lineSeparator() +
+                    "ORGANIZE ON (\"C1\",\"C2\");",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
   }
@@ -158,17 +159,17 @@ public class NetezzaSqlDatabaseDialectTest extends BaseDialectTest<NetezzaSqlDat
 
     assertEquals(
         Arrays.asList(
-                "ALTER TABLE myTable " + System.lineSeparator() +
-                "ADD c1 INT NOT NULL," + System.lineSeparator() +
-                "ADD c2 BIGINT NOT NULL," + System.lineSeparator() +
-                "ADD c3 VARCHAR(250) NOT NULL," + System.lineSeparator() +
-                "ADD c4 VARCHAR(250) NULL," + System.lineSeparator() +
-                "ADD c5 DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
-                "ADD c6 TIME DEFAULT '00:00:00.000'," + System.lineSeparator() +
-                "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
-                "ADD c8 DECIMAL NULL," + System.lineSeparator() +
-                "ADD c9 BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
-                "ADD event JSONB NOT NULL"
+                "ALTER TABLE \"myTable\" " + System.lineSeparator() +
+                "ADD \"c1\" INT NOT NULL," + System.lineSeparator() +
+                "ADD \"c2\" BIGINT NOT NULL," + System.lineSeparator() +
+                "ADD \"c3\" VARCHAR(250) NOT NULL," + System.lineSeparator() +
+                "ADD \"c4\" VARCHAR(250) NULL," + System.lineSeparator() +
+                "ADD \"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+                "ADD \"c6\" TIME DEFAULT '00:00:00.000'," + System.lineSeparator() +
+                "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+                "ADD \"c8\" DECIMAL NULL," + System.lineSeparator() +
+                "ADD \"c9\" BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
+                "ADD \"event\" JSONB NOT NULL"
         ),
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -192,8 +193,8 @@ public class NetezzaSqlDatabaseDialectTest extends BaseDialectTest<NetezzaSqlDat
     dialect = createDialect();
 
     assertEquals(
-        "INSERT INTO myTable (columnA,columnB," +
-        "columnC,columnD) VALUES (?,?,?,?::jsonb)",
+        "INSERT INTO \"myTable\" (\"columnA\",\"columnB\"," +
+                "\"columnC\",\"columnD\") VALUES (?,?,?,?::jsonb)",
         dialect.buildInsertStatement(tableId,  columnsAtoD, tableDefn)
     );
 
@@ -211,9 +212,8 @@ public class NetezzaSqlDatabaseDialectTest extends BaseDialectTest<NetezzaSqlDat
     nonPkColumns.add(new ColumnId(tableId, "dateColumn"));
     nonPkColumns.add(new ColumnId(tableId, "event"));
     assertEquals(
-        "INSERT INTO myTable (" +
-        "columnA,uuidColumn,dateColumn,event" +
-        ") VALUES (?,?::uuid,?,?::jsonb)",
+            "INSERT INTO \"myTable\" (\"columnA\",\"uuidColumn\","+
+                    "\"dateColumn\",\"event\") VALUES (?,?::uuid,?,?::jsonb)",
         dialect.buildInsertStatement(tableId, nonPkColumns, tableDefn)
     );
   }

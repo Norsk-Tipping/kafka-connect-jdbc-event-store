@@ -108,48 +108,48 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
                 "\"c9\" BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
                 "\"event\" JSONB NOT NULL)" + System.lineSeparator() +
                 System.lineSeparator() +
-                "PARTITION BY HASH (\"c1\");" + System.lineSeparator() +
-                "CREATE TABLE myTable_h0 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 0);" + System.lineSeparator() +
-                "CREATE TABLE myTable_h1 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 1);" + System.lineSeparator() +
-                "CREATE TABLE myTable_h2 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 2);" + System.lineSeparator() +
-                "CREATE TABLE myTable_h3 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 3);" + System.lineSeparator() +
-                "CREATE TABLE myTable_h4 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 4);" + System.lineSeparator() +
-                "CREATE TABLE myTable_h5 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 5);" + System.lineSeparator() +
-                "CREATE TABLE myTable_h6 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 6);" + System.lineSeparator() +
-                "CREATE TABLE myTable_h7 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 7);" + System.lineSeparator() +
-                "CREATE TABLE myTable_h8 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 8);" + System.lineSeparator() +
-                "CREATE TABLE myTable_h9 PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 9);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h0_c6 ON myTable_h0 USING brin(c6);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h0_c7 ON myTable_h0 USING brin(c7);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h1_c6 ON myTable_h1 USING brin(c6);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h1_c7 ON myTable_h1 USING brin(c7);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h2_c6 ON myTable_h2 USING brin(c6);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h2_c7 ON myTable_h2 USING brin(c7);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h3_c6 ON myTable_h3 USING brin(c6);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h3_c7 ON myTable_h3 USING brin(c7);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h4_c6 ON myTable_h4 USING brin(c6);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h4_c7 ON myTable_h4 USING brin(c7);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h5_c6 ON myTable_h5 USING brin(c6);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h5_c7 ON myTable_h5 USING brin(c7);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h6_c6 ON myTable_h6 USING brin(c6);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h6_c7 ON myTable_h6 USING brin(c7);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h7_c6 ON myTable_h7 USING brin(c6);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h7_c7 ON myTable_h7 USING brin(c7);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h8_c6 ON myTable_h8 USING brin(c6);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h8_c7 ON myTable_h8 USING brin(c7);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h9_c6 ON myTable_h9 USING brin(c6);" + System.lineSeparator() +
-                "CREATE INDEX brin_myTable_h9_c7 ON myTable_h9 USING brin(c7);;" + System.lineSeparator() +
+                "PARTITION BY HASH (\"C1\");" + System.lineSeparator() +
+                "CREATE TABLE \"myTable_h0\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 0);" + System.lineSeparator() +
+                "CREATE TABLE \"myTable_h1\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 1);" + System.lineSeparator() +
+                "CREATE TABLE \"myTable_h2\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 2);" + System.lineSeparator() +
+                "CREATE TABLE \"myTable_h3\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 3);" + System.lineSeparator() +
+                "CREATE TABLE \"myTable_h4\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 4);" + System.lineSeparator() +
+                "CREATE TABLE \"myTable_h5\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 5);" + System.lineSeparator() +
+                "CREATE TABLE \"myTable_h6\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 6);" + System.lineSeparator() +
+                "CREATE TABLE \"myTable_h7\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 7);" + System.lineSeparator() +
+                "CREATE TABLE \"myTable_h8\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 8);" + System.lineSeparator() +
+                "CREATE TABLE \"myTable_h9\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 9);" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h0_C6\" ON \"myTable_h0\" USING brin(\"C6\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h0_C7\" ON \"myTable_h0\" USING brin(\"C7\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h1_C6\" ON \"myTable_h1\" USING brin(\"C6\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h1_C7\" ON \"myTable_h1\" USING brin(\"C7\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h2_C6\" ON \"myTable_h2\" USING brin(\"C6\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h2_C7\" ON \"myTable_h2\" USING brin(\"C7\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h3_C6\" ON \"myTable_h3\" USING brin(\"C6\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h3_C7\" ON \"myTable_h3\" USING brin(\"C7\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h4_C6\" ON \"myTable_h4\" USING brin(\"C6\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h4_C7\" ON \"myTable_h4\" USING brin(\"C7\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h5_C6\" ON \"myTable_h5\" USING brin(\"C6\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h5_C7\" ON \"myTable_h5\" USING brin(\"C7\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h6_C6\" ON \"myTable_h6\" USING brin(\"C6\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h6_C7\" ON \"myTable_h6\" USING brin(\"C7\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h7_C6\" ON \"myTable_h7\" USING brin(\"C6\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h7_C7\" ON \"myTable_h7\" USING brin(\"C7\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h8_C6\" ON \"myTable_h8\" USING brin(\"C6\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h8_C7\" ON \"myTable_h8\" USING brin(\"C7\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h9_C6\" ON \"myTable_h9\" USING brin(\"C6\");" + System.lineSeparator() +
+                "CREATE INDEX \"brin_myTable_h9_C7\" ON \"myTable_h9\" USING brin(\"C7\");;" + System.lineSeparator() +
                 "CREATE EXTENSION IF NOT EXISTS bloom;" + System.lineSeparator() +
-                "CREATE INDEX bloom_myTable_h0 ON myTable_h0 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
-                "CREATE INDEX bloom_myTable_h1 ON myTable_h1 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
-                "CREATE INDEX bloom_myTable_h2 ON myTable_h2 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
-                "CREATE INDEX bloom_myTable_h3 ON myTable_h3 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
-                "CREATE INDEX bloom_myTable_h4 ON myTable_h4 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
-                "CREATE INDEX bloom_myTable_h5 ON myTable_h5 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
-                "CREATE INDEX bloom_myTable_h6 ON myTable_h6 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
-                "CREATE INDEX bloom_myTable_h7 ON myTable_h7 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
-                "CREATE INDEX bloom_myTable_h8 ON myTable_h8 USING bloom(\"c1\",\"c2\");" + System.lineSeparator() +
-                "CREATE INDEX bloom_myTable_h9 ON myTable_h9 USING bloom(\"c1\",\"c2\");",
+                "CREATE INDEX \"bloom_myTable_h0\" ON \"myTable_h0\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                "CREATE INDEX \"bloom_myTable_h1\" ON \"myTable_h1\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                "CREATE INDEX \"bloom_myTable_h2\" ON \"myTable_h2\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                "CREATE INDEX \"bloom_myTable_h3\" ON \"myTable_h3\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                "CREATE INDEX \"bloom_myTable_h4\" ON \"myTable_h4\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                "CREATE INDEX \"bloom_myTable_h5\" ON \"myTable_h5\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                "CREATE INDEX \"bloom_myTable_h6\" ON \"myTable_h6\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                "CREATE INDEX \"bloom_myTable_h7\" ON \"myTable_h7\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                "CREATE INDEX \"bloom_myTable_h8\" ON \"myTable_h8\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                "CREATE INDEX \"bloom_myTable_h9\" ON \"myTable_h9\" USING bloom(\"C1\",\"C2\");",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
 
@@ -157,60 +157,60 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     dialect = createDialect();
 
     assertEquals(
-            "CREATE TABLE myTable (" + System.lineSeparator() +
-                    "c1 INT NOT NULL," + System.lineSeparator() +
-                    "c2 BIGINT NOT NULL," + System.lineSeparator() +
-                    "c3 TEXT NOT NULL," + System.lineSeparator() +
-                    "c4 TEXT NULL," + System.lineSeparator() +
-                    "c5 DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
-                    "c6 TIME DEFAULT '00:00:00.000'," + System.lineSeparator() +
-                    "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
-                    "c8 DECIMAL NULL," + System.lineSeparator() +
-                    "c9 BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
-                    "event JSONB NOT NULL)" + System.lineSeparator() +
+            "CREATE TABLE \"myTable\" (" + System.lineSeparator() +
+                    "\"c1\" INT NOT NULL," + System.lineSeparator() +
+                    "\"c2\" BIGINT NOT NULL," + System.lineSeparator() +
+                    "\"c3\" TEXT NOT NULL," + System.lineSeparator() +
+                    "\"c4\" TEXT NULL," + System.lineSeparator() +
+                    "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+                    "\"c6\" TIME DEFAULT '00:00:00.000'," + System.lineSeparator() +
+                    "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+                    "\"c8\" DECIMAL NULL," + System.lineSeparator() +
+                    "\"c9\" BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
+                    "\"event\" JSONB NOT NULL)" + System.lineSeparator() +
                     System.lineSeparator() +
-                    "PARTITION BY HASH (c1);" + System.lineSeparator() +
-                    "CREATE TABLE myTable_h0 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 0);" + System.lineSeparator() +
-                    "CREATE TABLE myTable_h1 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 1);" + System.lineSeparator() +
-                    "CREATE TABLE myTable_h2 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 2);" + System.lineSeparator() +
-                    "CREATE TABLE myTable_h3 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 3);" + System.lineSeparator() +
-                    "CREATE TABLE myTable_h4 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 4);" + System.lineSeparator() +
-                    "CREATE TABLE myTable_h5 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 5);" + System.lineSeparator() +
-                    "CREATE TABLE myTable_h6 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 6);" + System.lineSeparator() +
-                    "CREATE TABLE myTable_h7 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 7);" + System.lineSeparator() +
-                    "CREATE TABLE myTable_h8 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 8);" + System.lineSeparator() +
-                    "CREATE TABLE myTable_h9 PARTITION OF myTable FOR VALUES WITH (modulus 10, remainder 9);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h0_c6 ON myTable_h0 USING brin(c6);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h0_c7 ON myTable_h0 USING brin(c7);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h1_c6 ON myTable_h1 USING brin(c6);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h1_c7 ON myTable_h1 USING brin(c7);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h2_c6 ON myTable_h2 USING brin(c6);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h2_c7 ON myTable_h2 USING brin(c7);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h3_c6 ON myTable_h3 USING brin(c6);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h3_c7 ON myTable_h3 USING brin(c7);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h4_c6 ON myTable_h4 USING brin(c6);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h4_c7 ON myTable_h4 USING brin(c7);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h5_c6 ON myTable_h5 USING brin(c6);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h5_c7 ON myTable_h5 USING brin(c7);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h6_c6 ON myTable_h6 USING brin(c6);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h6_c7 ON myTable_h6 USING brin(c7);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h7_c6 ON myTable_h7 USING brin(c6);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h7_c7 ON myTable_h7 USING brin(c7);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h8_c6 ON myTable_h8 USING brin(c6);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h8_c7 ON myTable_h8 USING brin(c7);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h9_c6 ON myTable_h9 USING brin(c6);" + System.lineSeparator() +
-                    "CREATE INDEX brin_myTable_h9_c7 ON myTable_h9 USING brin(c7);;" + System.lineSeparator() +
+                    "PARTITION BY HASH (\"C1\");" + System.lineSeparator() +
+                    "CREATE TABLE \"myTable_h0\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 0);" + System.lineSeparator() +
+                    "CREATE TABLE \"myTable_h1\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 1);" + System.lineSeparator() +
+                    "CREATE TABLE \"myTable_h2\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 2);" + System.lineSeparator() +
+                    "CREATE TABLE \"myTable_h3\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 3);" + System.lineSeparator() +
+                    "CREATE TABLE \"myTable_h4\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 4);" + System.lineSeparator() +
+                    "CREATE TABLE \"myTable_h5\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 5);" + System.lineSeparator() +
+                    "CREATE TABLE \"myTable_h6\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 6);" + System.lineSeparator() +
+                    "CREATE TABLE \"myTable_h7\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 7);" + System.lineSeparator() +
+                    "CREATE TABLE \"myTable_h8\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 8);" + System.lineSeparator() +
+                    "CREATE TABLE \"myTable_h9\" PARTITION OF \"myTable\" FOR VALUES WITH (modulus 10, remainder 9);" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h0_C6\" ON \"myTable_h0\" USING brin(\"C6\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h0_C7\" ON \"myTable_h0\" USING brin(\"C7\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h1_C6\" ON \"myTable_h1\" USING brin(\"C6\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h1_C7\" ON \"myTable_h1\" USING brin(\"C7\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h2_C6\" ON \"myTable_h2\" USING brin(\"C6\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h2_C7\" ON \"myTable_h2\" USING brin(\"C7\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h3_C6\" ON \"myTable_h3\" USING brin(\"C6\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h3_C7\" ON \"myTable_h3\" USING brin(\"C7\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h4_C6\" ON \"myTable_h4\" USING brin(\"C6\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h4_C7\" ON \"myTable_h4\" USING brin(\"C7\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h5_C6\" ON \"myTable_h5\" USING brin(\"C6\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h5_C7\" ON \"myTable_h5\" USING brin(\"C7\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h6_C6\" ON \"myTable_h6\" USING brin(\"C6\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h6_C7\" ON \"myTable_h6\" USING brin(\"C7\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h7_C6\" ON \"myTable_h7\" USING brin(\"C6\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h7_C7\" ON \"myTable_h7\" USING brin(\"C7\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h8_C6\" ON \"myTable_h8\" USING brin(\"C6\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h8_C7\" ON \"myTable_h8\" USING brin(\"C7\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h9_C6\" ON \"myTable_h9\" USING brin(\"C6\");" + System.lineSeparator() +
+                    "CREATE INDEX \"brin_myTable_h9_C7\" ON \"myTable_h9\" USING brin(\"C7\");;" + System.lineSeparator() +
                     "CREATE EXTENSION IF NOT EXISTS bloom;" + System.lineSeparator() +
-                    "CREATE INDEX bloom_myTable_h0 ON myTable_h0 USING bloom(c1,c2);" + System.lineSeparator() +
-                    "CREATE INDEX bloom_myTable_h1 ON myTable_h1 USING bloom(c1,c2);" + System.lineSeparator() +
-                    "CREATE INDEX bloom_myTable_h2 ON myTable_h2 USING bloom(c1,c2);" + System.lineSeparator() +
-                    "CREATE INDEX bloom_myTable_h3 ON myTable_h3 USING bloom(c1,c2);" + System.lineSeparator() +
-                    "CREATE INDEX bloom_myTable_h4 ON myTable_h4 USING bloom(c1,c2);" + System.lineSeparator() +
-                    "CREATE INDEX bloom_myTable_h5 ON myTable_h5 USING bloom(c1,c2);" + System.lineSeparator() +
-                    "CREATE INDEX bloom_myTable_h6 ON myTable_h6 USING bloom(c1,c2);" + System.lineSeparator() +
-                    "CREATE INDEX bloom_myTable_h7 ON myTable_h7 USING bloom(c1,c2);" + System.lineSeparator() +
-                    "CREATE INDEX bloom_myTable_h8 ON myTable_h8 USING bloom(c1,c2);" + System.lineSeparator() +
-                    "CREATE INDEX bloom_myTable_h9 ON myTable_h9 USING bloom(c1,c2);",
+                    "CREATE INDEX \"bloom_myTable_h0\" ON \"myTable_h0\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                    "CREATE INDEX \"bloom_myTable_h1\" ON \"myTable_h1\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                    "CREATE INDEX \"bloom_myTable_h2\" ON \"myTable_h2\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                    "CREATE INDEX \"bloom_myTable_h3\" ON \"myTable_h3\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                    "CREATE INDEX \"bloom_myTable_h4\" ON \"myTable_h4\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                    "CREATE INDEX \"bloom_myTable_h5\" ON \"myTable_h5\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                    "CREATE INDEX \"bloom_myTable_h6\" ON \"myTable_h6\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                    "CREATE INDEX \"bloom_myTable_h7\" ON \"myTable_h7\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                    "CREATE INDEX \"bloom_myTable_h8\" ON \"myTable_h8\" USING bloom(\"C1\",\"C2\");" + System.lineSeparator() +
+                    "CREATE INDEX \"bloom_myTable_h9\" ON \"myTable_h9\" USING bloom(\"C1\",\"C2\");",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
   }
@@ -239,17 +239,17 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     assertEquals(
         Arrays.asList(
-                "ALTER TABLE myTable " + System.lineSeparator() +
-                "ADD c1 INT NOT NULL," + System.lineSeparator() +
-                "ADD c2 BIGINT NOT NULL," + System.lineSeparator() +
-                "ADD c3 TEXT NOT NULL," + System.lineSeparator() +
-                "ADD c4 TEXT NULL," + System.lineSeparator() +
-                "ADD c5 DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
-                "ADD c6 TIME DEFAULT '00:00:00.000'," + System.lineSeparator() +
-                "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
-                "ADD c8 DECIMAL NULL," + System.lineSeparator() +
-                "ADD c9 BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
-                "ADD event JSONB NOT NULL"
+                "ALTER TABLE \"myTable\" " + System.lineSeparator() +
+                "ADD \"c1\" INT NOT NULL," + System.lineSeparator() +
+                "ADD \"c2\" BIGINT NOT NULL," + System.lineSeparator() +
+                "ADD \"c3\" TEXT NOT NULL," + System.lineSeparator() +
+                "ADD \"c4\" TEXT NULL," + System.lineSeparator() +
+                "ADD \"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
+                "ADD \"c6\" TIME DEFAULT '00:00:00.000'," + System.lineSeparator() +
+                "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+                "ADD \"c8\" DECIMAL NULL," + System.lineSeparator() +
+                "ADD \"c9\" BOOLEAN DEFAULT TRUE," + System.lineSeparator() +
+                "ADD \"event\" JSONB NOT NULL"
         ),
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -273,8 +273,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     dialect = createDialect();
 
     assertEquals(
-        "INSERT INTO myTable (columnA,columnB," +
-        "columnC,columnD) VALUES (?,?,?,?::jsonb)",
+        "INSERT INTO \"myTable\" (\"columnA\",\"columnB\"," +
+        "\"columnC\",\"columnD\") VALUES (?,?,?,?::jsonb)",
         dialect.buildInsertStatement(tableId, columnsAtoD, tableDefn)
     );
 
@@ -290,8 +290,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     nonPkColumns.add(new ColumnId(tableId, "dateColumn"));
     nonPkColumns.add(new ColumnId(tableId, "event"));
     assertEquals(
-        "INSERT INTO myTable (" +
-        "columnA,uuidColumn,dateColumn,event" +
+        "INSERT INTO \"myTable\" (" +
+        "\"columnA\",\"uuidColumn\",\"dateColumn\",\"event\"" +
         ") VALUES (?,?::uuid,?,?::jsonb)",
         dialect.buildInsertStatement(tableId, nonPkColumns, tableDefn)
     );
