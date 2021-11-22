@@ -195,6 +195,7 @@ public class JdbcDbReadmeTest {
     props.put("auto.evolve", "true");
     props.put("connection.user", "postgres");
     props.put("connection.password", "password123");
+    props.put("uppercase", "false");
     /*props.put("value.converter.payload.field.name", "event");
     props.put("zonemapattributes", "intkey");
     props.put("distributionattributes", "stringkey");

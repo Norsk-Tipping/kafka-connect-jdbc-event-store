@@ -127,6 +127,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     props.put("db.timezone", timeZoneID);
     props.put("connection.user", "postgres");
     props.put("connection.password", "password123");
+    props.put("uppercase", "false");
 
     JdbcSinkTask task = new JdbcSinkTask();
     SinkTaskContext sinkTaskContextMock = mock(SinkTaskContext.class);
@@ -148,7 +149,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
         .build();
 
     schemaRegistry.register(topic+ "-value", avroSchema);
-    String expected = struct.toString();
+    String expected = "{\"firstName\":\"Alex\",\"lastName\":\"Smith\",\"bool\":true,\"short\":1234,\"byte\":-32,\"long\":12425436,\"float\":2356.3,\"double\":-2436546.56457,\"age\":21,\"modified\":\"2016-09-23T20:10:02.123Z\"}";
 
     SchemaAndValue schemaAndValue = converter.toConnectData(topic, serializer.serialize(topic, struct));
     task.put(Collections.singleton(
@@ -180,10 +181,11 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     props.put("connection.url", postgresqlHelper.postgreSQL());
     props.put("connection.user", "postgres");
     props.put("connection.password", "password123");
+    props.put("uppercase", "false");
 
     Map<String, String> map = Stream.of(
             new AbstractMap.SimpleImmutableEntry<>(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, "http://mock:8081"),
-
+            new AbstractMap.SimpleImmutableEntry<>("uppercase", "false"),
             new AbstractMap.SimpleImmutableEntry<>(JsonConverterConfig.SCHEMA_NAMES, "Person"),
             new AbstractMap.SimpleImmutableEntry<>("Person.firstName", "firstname"),
             new AbstractMap.SimpleImmutableEntry<>("Person.lastName", "lastname"),
@@ -196,9 +198,9 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     task.initialize(mock(SinkTaskContext.class));
 
     postgresqlHelper.createTable(
-        "CREATE TABLE " + topic + "(" +
-        "    firstName  TEXT," +
-        "    lastName  TEXT," +
+        "CREATE TABLE " + topic.toLowerCase() + "(" +
+        "    firstname  TEXT," +
+        "    lastname  TEXT," +
         "    event  JSONB);"
     );
 
@@ -216,18 +218,17 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
         .build();
 
     schemaRegistry.register(topic+ "-value", avroSchema);
-    String expected = struct.toString();
+    String expected = "{\"firstName\":\"Christina\",\"lastName\":\"Brams\",\"age\":28,\"bool\":false,\"short\":null,\"byte\":-72,\"long\":8594,\"float\":null,\"double\":3256677.56457,\"modified\":\"2016-09-23T20:10:02.123Z\"}";
 
     SchemaAndValue schemaAndValue = converter.toConnectData(topic, serializer.serialize(topic, struct));
     System.out.println(schemaAndValue);
     task.put(Collections.singleton(
             new SinkRecord(topic, 1, null, null, schemaAndValue.schema(), schemaAndValue.value(), 43)
     ));
-
     assertEquals(
         1,
         postgresqlHelper.select(
-            "SELECT * FROM " + topic + " WHERE firstName='" + struct.get("firstName") + "' and lastName='" + struct.get("lastName") + "'",
+            "SELECT * FROM " + topic.toLowerCase() + " WHERE firstname='" + struct.get("firstName") + "' and lastname='" + struct.get("lastName") + "'",
             new PostgresqlHelper.ResultSetReadCallback() {
               @Override
               public void read(ResultSet rs) throws SQLException {
