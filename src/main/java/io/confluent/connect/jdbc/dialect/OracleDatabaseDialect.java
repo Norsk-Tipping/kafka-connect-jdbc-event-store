@@ -244,14 +244,14 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     builder.append(table);
     builder.append(" (");
     writeColumnsSpec(builder, fields);
-/*    builder.append(",");
+    builder.append(",");
     builder.append(System.lineSeparator());
     builder.append("CONSTRAINT ");
     builder.append(table.tableName());
     builder.append("_ensure_json ");
     builder.append("CHECK (");
     builder.appendColumnName(converterPayloadFieldName());
-    builder.append(" IS JSON)");*/
+    builder.append(" IS JSON)");
     builder.append(")");
     builder.append(" NOCACHE NOLOGGING ");
     builder.append(System.lineSeparator());
