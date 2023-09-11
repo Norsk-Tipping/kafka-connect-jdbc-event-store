@@ -26,7 +26,7 @@
     <groupId>no.norsktipping</groupId>
     <artifactId>kafka-connect-jdbc-json-connector</artifactId>
     <packaging>jar</packaging>
-    <version>10.2.1</version>
+    <version>10.2.2</version>
     <name>kafka-connect-jdbc-json-connector</name>
     <organization>
         <name>Norsk Tipping AS</name>
@@ -73,7 +73,7 @@
         <dependency>
             <groupId>no.norsktipping</groupId>
             <artifactId>kafka-connect-converter-json</artifactId>
-            <version>1.0.0</version>
+            <version>1.0.1</version>
         </dependency>
         <dependency>
             <groupId>org.apache.kafka</groupId>

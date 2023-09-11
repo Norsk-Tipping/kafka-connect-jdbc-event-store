@@ -127,8 +127,9 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
             "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
             "\"c8\" NUMBER(*,4) NULL," + System.lineSeparator() +
             "\"c9\" NUMBER(1,0) DEFAULT 1," + System.lineSeparator() +
-            "\"event\" BLOB NOT NULL) NOCACHE NOLOGGING " + System.lineSeparator() +
-            " LOB (\"c3\",\"c4\",\"event\")" + System.lineSeparator() +
+            "\"event\" BLOB NOT NULL,"  + System.lineSeparator() +
+            "CONSTRAINT myTable_ensure_json CHECK (\"EVENT\" IS JSON)) NOCACHE NOLOGGING " + System.lineSeparator() +
+    " LOB (\"c3\",\"c4\",\"event\")" + System.lineSeparator() +
             " STORE AS SECUREFILE (COMPRESS HIGH ENABLE STORAGE IN ROW NOCACHE NOLOGGING) " + System.lineSeparator() +
             "" + System.lineSeparator() +
             "PARTITION BY HASH (\"C1\")(" + System.lineSeparator() +
