@@ -71,6 +71,11 @@ default `empty`
           Nested fields can be specified dot-delimited e.g. fieldname 4 within fieldname 3 within fieldname 2:
           "value.converter.json.<schema name 1>.<fieldname 2>.<fieldname 3>.<fieldname 4>": "true"
 
+### value.converter.includenamespace
+default `false`
+
+    Set to true if the produced JSON should include AVRO namespaces.
+
 ### extracting schema fields
 default `empty`
 <p>
